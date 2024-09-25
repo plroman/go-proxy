@@ -8,7 +8,7 @@ import (
 )
 
 func (srv *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
-	m := srv.metricsSrv.Float64Histogram(
+	m := srv.MetricsSrv.Float64Histogram(
 		"request_duration_api",
 		"API request handling duration",
 		metrics.UomMicroseconds,

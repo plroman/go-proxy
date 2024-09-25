@@ -20,15 +20,10 @@ v: ## Show the version
 clean: ## Clean the build directory
 	rm -rf build/
 
-.PHONY: build-cli
-build-cli: ## Build the CLI
+.PHONY: build
+build: ## Build the HTTP server
 	@mkdir -p ./build
-	go build -trimpath -ldflags "-X github.com/flashbots/orderflow-proxy/common.Version=${VERSION}" -v -o ./build/cli cmd/cli/main.go
-
-.PHONY: build-httpserver
-build-httpserver: ## Build the HTTP server
-	@mkdir -p ./build
-	go build -trimpath -ldflags "-X github.com/flashbots/orderflow-proxy/common.Version=${VERSION}" -v -o ./build/httpserver cmd/httpserver/main.go
+	go build -trimpath -ldflags "-X github.com/flashbots/orderflow-proxy/common.Version=${VERSION}" -v -o ./build/orderflow-proxy cmd/httpserver/main.go
 
 ##@ Test & Development
 
@@ -75,17 +70,8 @@ cover-html: ## Run tests with coverage and open the HTML report
 	go tool cover -html=/tmp/go-sim-lb.cover.tmp
 	unlink /tmp/go-sim-lb.cover.tmp
 
-.PHONY: docker-cli
-docker-cli: ## Build the CLI Docker image
-	DOCKER_BUILDKIT=1 docker build \
-		--platform linux/amd64 \
-		--build-arg VERSION=${VERSION} \
-		--file cli.dockerfile \
-		--tag your-project \
-	.
-
-.PHONY: docker-httpserver
-docker-httpserver: ## Build the HTTP server Docker image
+.PHONY: docker
+docker: ## Build the HTTP server Docker image
 	DOCKER_BUILDKIT=1 docker build \
 		--platform linux/amd64 \
 		--build-arg VERSION=${VERSION} \

@@ -33,7 +33,7 @@ type Server struct {
 	log     *slog.Logger
 
 	srv        *http.Server
-	metricsSrv *metrics.MetricsServer
+	MetricsSrv *metrics.MetricsServer
 }
 
 func New(cfg *HTTPServerConfig) (srv *Server, err error) {
@@ -46,7 +46,7 @@ func New(cfg *HTTPServerConfig) (srv *Server, err error) {
 		cfg:        cfg,
 		log:        cfg.Log,
 		srv:        nil,
-		metricsSrv: metricsSrv,
+		MetricsSrv: metricsSrv,
 	}
 	srv.isReady.Swap(true)
 
@@ -84,7 +84,7 @@ func (srv *Server) RunInBackground() {
 	if srv.cfg.MetricsAddr != "" {
 		go func() {
 			srv.log.With("metricsAddress", srv.cfg.MetricsAddr).Info("Starting metrics server")
-			err := srv.metricsSrv.ListenAndServe()
+			err := srv.MetricsSrv.ListenAndServe()
 			if err != nil && !errors.Is(err, http.ErrServerClosed) {
 				srv.log.Error("HTTP server failed", "err", err)
 			}
@@ -115,7 +115,7 @@ func (srv *Server) Shutdown() {
 		ctx, cancel := context.WithTimeout(context.Background(), srv.cfg.GracefulShutdownDuration)
 		defer cancel()
 
-		if err := srv.metricsSrv.Shutdown(ctx); err != nil {
+		if err := srv.MetricsSrv.Shutdown(ctx); err != nil {
 			srv.log.Error("Graceful metrics server shutdown failed", "err", err)
 		} else {
 			srv.log.Info("Metrics server gracefully stopped")

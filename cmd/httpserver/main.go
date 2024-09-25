@@ -9,15 +9,16 @@ import (
 
 	"github.com/flashbots/orderflow-proxy/common"
 	"github.com/flashbots/orderflow-proxy/httpserver"
+	"github.com/flashbots/orderflow-proxy/proxy"
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2" // imports as package "cli"
 )
 
 var flags []cli.Flag = []cli.Flag{
 	&cli.StringFlag{
-		Name:  "listen-addr",
+		Name:  "internal-listen-addr",
 		Value: "127.0.0.1:8080",
-		Usage: "address to listen on for API",
+		Usage: "address to listen on for internal API",
 	},
 	&cli.StringFlag{
 		Name:  "metrics-addr",
@@ -54,15 +55,35 @@ var flags []cli.Flag = []cli.Flag{
 		Value: 45,
 		Usage: "seconds to wait in drain HTTP request",
 	},
+	&cli.StringFlag{
+		Name:  "listen-addr",
+		Value: "127.0.0.1:9090",
+		Usage: "address to listen on for orderflow proxy API",
+	},
+	&cli.StringFlag{
+		Name:  "builder-endpoint",
+		Value: "127.0.0.1:8546",
+		Usage: "address to send local ordeflow to",
+	},
+	&cli.DurationFlag{
+		Name:  "cert-duration",
+		Value: time.Hour * 24 * 365,
+		Usage: "generated certificate duration",
+	},
+	&cli.StringSliceFlag{
+		Name:  "cert-hosts",
+		Value: cli.NewStringSlice("127.0.0.1", "localhost"),
+		Usage: "generated certificate hosts",
+	},
 }
 
 func main() {
 	app := &cli.App{
-		Name:  "httpserver",
+		Name:  "orderflow-proxy",
 		Usage: "Serve API, and metrics",
 		Flags: flags,
 		Action: func(cCtx *cli.Context) error {
-			listenAddr := cCtx.String("listen-addr")
+			internalListenAddr := cCtx.String("internal-listen-addr")
 			metricsAddr := cCtx.String("metrics-addr")
 			logJSON := cCtx.Bool("log-json")
 			logDebug := cCtx.Bool("log-debug")
@@ -84,7 +105,7 @@ func main() {
 			}
 
 			cfg := &httpserver.HTTPServerConfig{
-				ListenAddr:  listenAddr,
+				ListenAddr:  internalListenAddr,
 				MetricsAddr: metricsAddr,
 				Log:         log,
 				EnablePprof: enablePprof,
@@ -104,6 +125,31 @@ func main() {
 			exit := make(chan os.Signal, 1)
 			signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
 			srv.RunInBackground()
+
+			builderEndpoint := cCtx.String("builder-endpoint")
+			listedAddr := cCtx.String("listen-addr")
+			certDuration := cCtx.Duration("cert-duration")
+			certHosts := cCtx.StringSlice("cert-hosts")
+			proxyConfig := &proxy.Config{
+				Log:               log,
+				MetricsServer:     srv.MetricsSrv,
+				BuilderEndpoint:   builderEndpoint,
+				ListenAddr:        listedAddr,
+				CertValidDuration: certDuration,
+				CertHosts:         certHosts,
+			}
+
+			proxy, err := proxy.New(*proxyConfig)
+			if err != nil {
+				cfg.Log.Error("failed to create proxy server", "err", err)
+				return err
+			}
+			err = proxy.RunProxyInBackground()
+			if err != nil {
+				cfg.Log.Error("failed to start proxy server", "err", err)
+				return err
+			}
+
 			<-exit
 
 			// Shutdown server once termination signal is received
