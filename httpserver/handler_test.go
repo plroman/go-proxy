@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flashbots/go-template/common"
+	"github.com/flashbots/orderflow-proxy/common"
 	"github.com/stretchr/testify/require"
 )
 

@@ -1,4 +1,4 @@
-module github.com/flashbots/go-template
+module github.com/flashbots/orderflow-proxy
 
 go 1.22
 

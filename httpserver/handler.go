@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/flashbots/go-template/metrics"
+	"github.com/flashbots/orderflow-proxy/metrics"
 )
 
 func (srv *Server) handleAPI(w http.ResponseWriter, r *http.Request) {

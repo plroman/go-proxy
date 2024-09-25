@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/flashbots/go-template/common"
-	"github.com/flashbots/go-template/httpserver"
+	"github.com/flashbots/orderflow-proxy/common"
+	"github.com/flashbots/orderflow-proxy/httpserver"
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2" // imports as package "cli"
 )
