@@ -9,7 +9,7 @@
 
 ```bash
 make build
-``**
+```
 
 ## Run
 
@@ -28,4 +28,24 @@ Flags for the orderflow proxy
 --builder-endpoint value                   address to send local ordeflow to (default: "127.0.0.1:8546")
 --cert-duration value                      generated certificate duration (default: 8760h0m0s)
 --cert-hosts value [ --cert-hosts value ]  generated certificate hosts (default: "127.0.0.1", "localhost")
+```
+
+
+## curl TLS example
+
+1. Run orderflow proxy
+
+```bash
+make build 
+./build/orderflow-proxy --listen-addr "localhost:8000"
+```
+
+2. Extract self signed certificate 
+```bash
+# -k will tell curl to ignore the fact that cert is self signed
+curl -w %{certs} -k https://localhost:8000 > cacert.pem
+```
+3. Make call using this certificate
+```bash
+curl https://localhost:8000 --cacert cacert.pem
 ```
