@@ -8,18 +8,12 @@ import (
 	"time"
 
 	"github.com/flashbots/orderflow-proxy/common"
-	"github.com/flashbots/orderflow-proxy/httpserver"
 	"github.com/flashbots/orderflow-proxy/proxy"
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2" // imports as package "cli"
 )
 
 var flags []cli.Flag = []cli.Flag{
-	&cli.StringFlag{
-		Name:  "internal-listen-addr",
-		Value: "127.0.0.1:8080",
-		Usage: "address to listen on for internal API",
-	},
 	&cli.StringFlag{
 		Name:  "metrics-addr",
 		Value: "127.0.0.1:8090",
@@ -50,15 +44,15 @@ var flags []cli.Flag = []cli.Flag{
 		Value: false,
 		Usage: "enable pprof debug endpoint",
 	},
-	&cli.Int64Flag{
-		Name:  "drain-seconds",
-		Value: 45,
-		Usage: "seconds to wait in drain HTTP request",
-	},
 	&cli.StringFlag{
 		Name:  "listen-addr",
 		Value: "127.0.0.1:9090",
 		Usage: "address to listen on for orderflow proxy API",
+	},
+	&cli.StringFlag{
+		Name:  "external-addr",
+		Value: "127.0.0.1",
+		Usage: "address of this service reachable from outside",
 	},
 	&cli.StringFlag{
 		Name:  "builder-endpoint",
@@ -83,14 +77,12 @@ func main() {
 		Usage: "Serve API, and metrics",
 		Flags: flags,
 		Action: func(cCtx *cli.Context) error {
-			internalListenAddr := cCtx.String("internal-listen-addr")
-			metricsAddr := cCtx.String("metrics-addr")
+			_ = cCtx.String("metrics-addr")
+			_ = cCtx.Bool("pprof")
 			logJSON := cCtx.Bool("log-json")
 			logDebug := cCtx.Bool("log-debug")
 			logUID := cCtx.Bool("log-uid")
 			logService := cCtx.String("log-service")
-			enablePprof := cCtx.Bool("pprof")
-			drainDuration := time.Duration(cCtx.Int64("drain-seconds")) * time.Second
 
 			log := common.SetupLogger(&common.LoggingOpts{
 				Debug:   logDebug,
@@ -104,56 +96,36 @@ func main() {
 				log = log.With("uid", id.String())
 			}
 
-			cfg := &httpserver.HTTPServerConfig{
-				ListenAddr:  internalListenAddr,
-				MetricsAddr: metricsAddr,
-				Log:         log,
-				EnablePprof: enablePprof,
-
-				DrainDuration:            drainDuration,
-				GracefulShutdownDuration: 30 * time.Second,
-				ReadTimeout:              60 * time.Second,
-				WriteTimeout:             30 * time.Second,
-			}
-
-			srv, err := httpserver.New(cfg)
-			if err != nil {
-				cfg.Log.Error("failed to create server", "err", err)
-				return err
-			}
-
 			exit := make(chan os.Signal, 1)
 			signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
-			srv.RunInBackground()
 
 			builderEndpoint := cCtx.String("builder-endpoint")
 			listedAddr := cCtx.String("listen-addr")
 			certDuration := cCtx.Duration("cert-duration")
 			certHosts := cCtx.StringSlice("cert-hosts")
+			externalAddr := cCtx.String("external-addr")
 			proxyConfig := &proxy.Config{
 				Log:               log,
-				MetricsServer:     srv.MetricsSrv,
 				BuilderEndpoint:   builderEndpoint,
 				ListenAddr:        listedAddr,
 				CertValidDuration: certDuration,
 				CertHosts:         certHosts,
+				BuilderConfigHub:  proxy.MockBuilderConfigHub{},
+				ExternalAddr:      externalAddr,
 			}
 
 			proxy, err := proxy.New(*proxyConfig)
 			if err != nil {
-				cfg.Log.Error("failed to create proxy server", "err", err)
+				log.Error("failed to create proxy server", "err", err)
 				return err
 			}
 			err = proxy.RunProxyInBackground()
 			if err != nil {
-				cfg.Log.Error("failed to start proxy server", "err", err)
+				log.Error("failed to start proxy server", "err", err)
 				return err
 			}
 
 			<-exit
-
-			// Shutdown server once termination signal is received
-			srv.Shutdown()
 			return nil
 		},
 	}

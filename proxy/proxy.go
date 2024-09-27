@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -9,22 +10,24 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/flashbots/orderflow-proxy/metrics"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type Config struct {
-	Log           *slog.Logger
-	MetricsServer *metrics.MetricsServer
-
+	Log               *slog.Logger
 	BuilderEndpoint   string
 	ListenAddr        string
+	ExternalAddr      string
 	CertValidDuration time.Duration
 	CertHosts         []string
+	BuilderConfigHub  BuilderConfigHub
 }
 
 type Proxy struct {
 	Config Config
-	log    *slog.Logger
+
+	log                *slog.Logger
+	orderflowSignerKey *ecdsa.PrivateKey
 }
 
 func New(config Config) (*Proxy, error) {
@@ -48,8 +51,27 @@ func (prx *Proxy) GenerateAndPublish() (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	// todo: publish
-	//
+
+	orderflowSignerKey, err := crypto.GenerateKey()
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	prx.orderflowSignerKey = orderflowSignerKey
+	orderflowSigner := crypto.PubkeyToAddress(orderflowSignerKey.PublicKey)
+
+	prx.log.Info("Generated ordeflow signer", "address", orderflowSigner)
+
+	selfInfo := BuilderInfo{
+		Cert:            cert,
+		OrderflowSigner: orderflowSigner,
+		NetworkAddress:  prx.Config.ExternalAddr,
+	}
+
+	err = prx.Config.BuilderConfigHub.PublishConfig(selfInfo)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
 	return tls.X509KeyPair(cert, key)
 }
 
