@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/VictoriaMetrics/metrics"
 	"github.com/flashbots/orderflow-proxy/common"
 	"github.com/flashbots/orderflow-proxy/proxy"
 	"github.com/google/uuid"
@@ -17,7 +20,7 @@ var flags []cli.Flag = []cli.Flag{
 	&cli.StringFlag{
 		Name:  "metrics-addr",
 		Value: "127.0.0.1:8090",
-		Usage: "address to listen on for Prometheus metrics",
+		Usage: "address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics)",
 	},
 	&cli.BoolFlag{
 		Name:  "log-json",
@@ -42,7 +45,7 @@ var flags []cli.Flag = []cli.Flag{
 	&cli.BoolFlag{
 		Name:  "pprof",
 		Value: false,
-		Usage: "enable pprof debug endpoint",
+		Usage: "enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*)",
 	},
 	&cli.StringFlag{
 		Name:  "listen-addr",
@@ -77,8 +80,6 @@ func main() {
 		Usage: "Serve API, and metrics",
 		Flags: flags,
 		Action: func(cCtx *cli.Context) error {
-			_ = cCtx.String("metrics-addr")
-			_ = cCtx.Bool("pprof")
 			logJSON := cCtx.Bool("log-json")
 			logDebug := cCtx.Bool("log-debug")
 			logUID := cCtx.Bool("log-uid")
@@ -98,6 +99,34 @@ func main() {
 
 			exit := make(chan os.Signal, 1)
 			signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
+
+			// metrics server
+			go func() {
+				metricsAddr := cCtx.String("metrics-addr")
+				usePprof := cCtx.Bool("pprof")
+				metricsMux := http.NewServeMux()
+				metricsMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+					metrics.WritePrometheus(w, true)
+				})
+				if usePprof {
+					metricsMux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+					metricsMux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+					metricsMux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+					metricsMux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+					metricsMux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+				}
+
+				metricsServer := &http.Server{
+					Addr:              metricsAddr,
+					ReadHeaderTimeout: 5 * time.Second,
+					Handler:           metricsMux,
+				}
+
+				err := metricsServer.ListenAndServe()
+				if err != nil {
+					log.Error("Failed to start metrics server", "err", err)
+				}
+			}()
 
 			builderEndpoint := cCtx.String("builder-endpoint")
 			listedAddr := cCtx.String("listen-addr")

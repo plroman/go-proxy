@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/flashbots/orderflow-proxy/metrics"
 )
 
 type Config struct {
@@ -38,6 +39,7 @@ func New(config Config) (*Proxy, error) {
 }
 
 func (prx *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	metrics.IncRequestsReceived()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return
