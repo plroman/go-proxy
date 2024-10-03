@@ -17,6 +17,41 @@ import (
 )
 
 var flags []cli.Flag = []cli.Flag{
+	// input and output
+	&cli.StringFlag{
+		Name:  "users-listen-addr",
+		Value: "127.0.0.1:443",
+		Usage: "address to listen on for orderflow proxy API for external users and local operator",
+	},
+	&cli.StringFlag{
+		Name:  "network-listen-addr",
+		Value: "127.0.0.1:5544",
+		Usage: "address to listen on for orderflow proxy API for other network participants",
+	},
+	&cli.StringFlag{
+		Name:  "cert-listen-addr",
+		Value: "127.0.0.1:14727",
+		Usage: "address to listen on for orderflow proxy serving its SSL certificate on /cert",
+	},
+	&cli.StringFlag{
+		Name:  "builder-endpoint",
+		Value: "127.0.0.1:8546",
+		Usage: "address to send local ordeflow to",
+	},
+
+	// certificate config
+	&cli.DurationFlag{
+		Name:  "cert-duration",
+		Value: time.Hour * 24 * 365,
+		Usage: "generated certificate duration",
+	},
+	&cli.StringSliceFlag{
+		Name:  "cert-hosts",
+		Value: cli.NewStringSlice("127.0.0.1", "localhost"),
+		Usage: "generated certificate hosts",
+	},
+
+	// logging, metrics and debug
 	&cli.StringFlag{
 		Name:  "metrics-addr",
 		Value: "127.0.0.1:8090",
@@ -46,31 +81,6 @@ var flags []cli.Flag = []cli.Flag{
 		Name:  "pprof",
 		Value: false,
 		Usage: "enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*)",
-	},
-	&cli.StringFlag{
-		Name:  "listen-addr",
-		Value: "127.0.0.1:9090",
-		Usage: "address to listen on for orderflow proxy API",
-	},
-	&cli.StringFlag{
-		Name:  "external-addr",
-		Value: "127.0.0.1",
-		Usage: "address of this service reachable from outside",
-	},
-	&cli.StringFlag{
-		Name:  "builder-endpoint",
-		Value: "127.0.0.1:8546",
-		Usage: "address to send local ordeflow to",
-	},
-	&cli.DurationFlag{
-		Name:  "cert-duration",
-		Value: time.Hour * 24 * 365,
-		Usage: "generated certificate duration",
-	},
-	&cli.StringSliceFlag{
-		Name:  "cert-hosts",
-		Value: cli.NewStringSlice("127.0.0.1", "localhost"),
-		Usage: "generated certificate hosts",
 	},
 }
 
@@ -128,19 +138,23 @@ func main() {
 				}
 			}()
 
+			usersListenAddr := cCtx.String("users-listen-addr")
+			networkListenAddr := cCtx.String("network-listen-addr")
+			certListenAddr := cCtx.String("cert-listen-addr")
 			builderEndpoint := cCtx.String("builder-endpoint")
-			listedAddr := cCtx.String("listen-addr")
 			certDuration := cCtx.Duration("cert-duration")
 			certHosts := cCtx.StringSlice("cert-hosts")
-			externalAddr := cCtx.String("external-addr")
 			proxyConfig := &proxy.Config{
 				Log:               log,
+				UsersListenAddr:   usersListenAddr,
+				NetworkListenAddr: networkListenAddr,
+				CertListenAddr:    certListenAddr,
 				BuilderEndpoint:   builderEndpoint,
-				ListenAddr:        listedAddr,
+
 				CertValidDuration: certDuration,
 				CertHosts:         certHosts,
-				BuilderConfigHub:  proxy.MockBuilderConfigHub{},
-				ExternalAddr:      externalAddr,
+
+				BuilderConfigHub: proxy.MockBuilderConfigHub{},
 			}
 
 			proxy, err := proxy.New(*proxyConfig)
@@ -148,7 +162,13 @@ func main() {
 				log.Error("failed to create proxy server", "err", err)
 				return err
 			}
-			err = proxy.RunProxyInBackground()
+			err = proxy.GenerateAndPublish()
+			if err != nil {
+				log.Error("failed to generate and publish secrets", "err", err)
+				return err
+			}
+
+			err = proxy.StartServersInBackground()
 			if err != nil {
 				log.Error("failed to start proxy server", "err", err)
 				return err

@@ -5,7 +5,6 @@ import "github.com/ethereum/go-ethereum/common"
 type BuilderInfo struct {
 	Cert            []byte
 	OrderflowSigner common.Address
-	NetworkAddress  string
 }
 
 type BuilderConfigHub interface {
