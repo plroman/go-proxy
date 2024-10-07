@@ -40,7 +40,7 @@ GLOBAL OPTIONS:
    --users-listen-addr value                  address to listen on for orderflow proxy API for external users and local operator (default: "127.0.0.1:443")
    --network-listen-addr value                address to listen on for orderflow proxy API for other network participants (default: "127.0.0.1:5544")
    --cert-listen-addr value                   address to listen on for orderflow proxy serving its SSL certificate on /cert (default: "127.0.0.1:14727")
-   --builder-endpoint value                   address to send local ordeflow to (default: "127.0.0.1:8546")
+   --builder-endpoint value                   address to send local ordeflow to (default: "127.0.0.1:8645")
    --cert-duration value                      generated certificate duration (default: 8760h0m0s)
    --cert-hosts value [ --cert-hosts value ]  generated certificate hosts (default: "127.0.0.1", "localhost")
    --metrics-addr value                       address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090")

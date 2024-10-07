@@ -35,7 +35,7 @@ var flags []cli.Flag = []cli.Flag{
 	},
 	&cli.StringFlag{
 		Name:  "builder-endpoint",
-		Value: "127.0.0.1:8546",
+		Value: "127.0.0.1:8645",
 		Usage: "address to send local ordeflow to",
 	},
 
