@@ -23,15 +23,15 @@ type EthSendBundleArgs struct {
 	RevertingTxHashes []common.Hash   `json:"revertingTxHashes,omitempty"`
 	ReplacementUUID   *string         `json:"replacementUuid,omitempty"`
 
-	// fields availabe only when receiving from the Flashbots or other builders, not users
+	// fields available only when receiving from the Flashbots or other builders, not users
 	ReplacementNonce *uint64         `json:"replacementNonce,omitempty"`
 	SigningAddress   *common.Address `json:"signingAddress,omitempty"`
 
 	DroppingTxHashes []common.Hash   `json:"droppingTxHashes,omitempty"` // not supported (from beaverbuild)
 	UUID             *string         `json:"uuid,omitempty"`             // not supported (from beaverbuild)
-	RefundPercent    *uint64         `json:refundPercent,omitempty`      // not supported (from beaverbuild)
-	RefundRecipient  *common.Address `json:refundRecipient,omitempty`    // not supported (from beaverbuild)
-	RefundTxHashes   []string        `json:refundTxHashes,omitempty`     // not supported (from titanbuilder)
+	RefundPercent    *uint64         `json:"refundPercent,omitempty"`    // not supported (from beaverbuild)
+	RefundRecipient  *common.Address `json:"refundRecipient,omitempty"`  // not supported (from beaverbuild)
+	RefundTxHashes   []string        `json:"refundTxHashes,omitempty"`   // not supported (from titanbuilder)
 }
 
 // mev_sendBundle
