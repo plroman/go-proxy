@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,31 +21,48 @@ var (
 	errWrongContentType = "Content-Type must be application/json"
 	errMarshalResponse  = "Failed to marshal response"
 
+	// jsonrpc error codes
+	CodeParseError     = -32700
+	CodeInvalidRequest = -32600
+	CodeMethodNotFound = -32601
+	CodeInvalidParams  = -32602
+	CodeInternalError  = -32603
+	CodeCustomError    = -32000
+
 	errBodySize = JSONRPCError{
 		Code:    -32602,
 		Message: fmt.Sprintf("Request body too large, max body size %d", maxRequestBodySizeBytes),
 	}
-	errInvalidRequest = func(err error) JSONRPCError {
-		var anyErr any = err
-		return JSONRPCError{
-			Code:    -32602,
+	errInvalidRequest = func(err error) *JSONRPCError {
+		var anyErr any = err.Error()
+		return &JSONRPCError{
+			Code:    CodeInvalidRequest,
 			Message: "Invalid JSON request",
 			Data:    &anyErr,
 		}
 	}
 	errMethodNotFound = JSONRPCError{
-		Code:    -32602,
+		Code:    CodeMethodNotFound,
 		Message: "Method not found",
 	}
 	errSignatureNotFound = JSONRPCError{
-		Code:    -32602,
+		Code:    CodeInvalidRequest,
 		Message: "Signature header not set " + signature.HTTPHeader,
 	}
-	errSignatureNotCorrect = func(err error) JSONRPCError {
-		var anyErr any = err
-		return JSONRPCError{
-			Code:    -32602,
+	errSignatureNotCorrect = func(err error) *JSONRPCError {
+		var anyErr any = err.Error()
+		return &JSONRPCError{
+			Code:    CodeInvalidRequest,
 			Message: "Request signature is not correct",
+			Data:    &anyErr,
+		}
+	}
+	errExpectedOneParam        = errors.New("request must have one param element")
+	errFailToParseRequestParam = func(err error) *JSONRPCError {
+		var anyErr any = err.Error()
+		return &JSONRPCError{
+			Code:    CodeInvalidParams,
+			Message: "Failed to parse request params",
 			Data:    &anyErr,
 		}
 	}
@@ -117,8 +135,7 @@ func (prx *Proxy) ServeProxyRequest(w http.ResponseWriter, r *http.Request, publ
 	var req JSONRPCRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		err := errInvalidRequest(err)
-		respondWithJSONRPCError(w, r, nil, &err, prx.log)
+		respondWithJSONRPCError(w, r, nil, errInvalidRequest(err), prx.log)
 		return
 	}
 
@@ -134,8 +151,7 @@ func (prx *Proxy) ServeProxyRequest(w http.ResponseWriter, r *http.Request, publ
 	} else {
 		signer, err = signature.Verify(signatureHeader, body)
 		if err != nil {
-			err := errSignatureNotCorrect(err)
-			respondWithJSONRPCError(w, r, req.ID, &err, prx.log)
+			respondWithJSONRPCError(w, r, req.ID, errSignatureNotCorrect(err), prx.log)
 			return
 		}
 	}
@@ -154,6 +170,70 @@ func (prx *Proxy) ServeProxyRequest(w http.ResponseWriter, r *http.Request, publ
 	respondWithJSONRPCResponse(w, r, &response, prx.log)
 }
 
+type ParsedRequest struct {
+	publicEndpoint        bool
+	signer                common.Address
+	ethSendBundle         *EthSendBundleArgs
+	mevSendBundle         *MevSendBundleArgs
+	ethCancelBundle       *EthCancelBundleArgs
+	ethSendRawTransaction *EthSendRawTransactionArgs
+	bidSubsidiseBlock     *BidSubsisideBlockArgs
+}
+
+func parseParams[A any](params []json.RawMessage) (*A, *JSONRPCError) {
+	if len(params) != 1 {
+		return nil, errFailToParseRequestParam(errExpectedOneParam)
+	}
+	var param A
+	err := json.Unmarshal(params[0], &param)
+	if err != nil {
+		return nil, errFailToParseRequestParam(err)
+	}
+	return &param, nil
+}
+
 func (prx *Proxy) HandleRequest(req JSONRPCRequest, signer common.Address, publicEndpoint bool) *JSONRPCError {
-	return &errMethodNotFound
+	parsedRequest := ParsedRequest{
+		publicEndpoint: publicEndpoint,
+		signer:         signer,
+	}
+	switch req.Method {
+	case "eth_sendBundle":
+		ethSendBundle, err := parseParams[EthSendBundleArgs](req.Params)
+		if err != nil {
+			return err
+		}
+		parsedRequest.ethSendBundle = ethSendBundle
+	case "mev_sendBundle":
+		mevSendBundle, err := parseParams[MevSendBundleArgs](req.Params)
+		if err != nil {
+			return err
+		}
+		parsedRequest.mevSendBundle = mevSendBundle
+	case "eth_cancelBundle":
+		ethCancelBundle, err := parseParams[EthCancelBundleArgs](req.Params)
+		if err != nil {
+			return err
+		}
+		parsedRequest.ethCancelBundle = ethCancelBundle
+	case "eth_sendRawTransaction":
+		ethSendRawTransaction, err := parseParams[EthSendRawTransactionArgs](req.Params)
+		if err != nil {
+			return err
+		}
+		parsedRequest.ethSendRawTransaction = ethSendRawTransaction
+	case "bid_subsidiseBlock":
+		bidSubsidiseBlock, err := parseParams[BidSubsisideBlockArgs](req.Params)
+		if err != nil {
+			return err
+		}
+		parsedRequest.bidSubsidiseBlock = bidSubsidiseBlock
+	default:
+		return &errMethodNotFound
+	}
+	return prx.HandleParsedRequest(parsedRequest)
+}
+
+func (prx *Proxy) HandleParsedRequest(parsedRequset ParsedRequest) *JSONRPCError {
+	return nil
 }
