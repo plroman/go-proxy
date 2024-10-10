@@ -11,7 +11,7 @@ import (
 	"github.com/flashbots/go-utils/signature"
 )
 
-const maxRequestBodySizeBytes = 10 * 1024 * 1024 // 10 MB, @configurable
+const maxRequestBodySizeBytes = 30 * 1024 * 1024 // 30 MB, @configurable
 
 // Errors returned by the orderflow proxy
 // all errors are HTTP 200 jsonrpc responses except some that return proper http error code and a string
@@ -122,7 +122,8 @@ func (prx *Proxy) ServeProxyRequest(w http.ResponseWriter, r *http.Request, publ
 		return
 	}
 
-	// verify signature here, if public endpoint and its not signed this will be 0x0
+	// verify signature
+	// if public endpoint and its not signed this will be 0x0
 	var signer common.Address
 	signatureHeader := r.Header.Get(signature.HTTPHeader)
 	if signatureHeader == "" {
