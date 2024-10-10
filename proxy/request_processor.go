@@ -180,7 +180,7 @@ type ParsedRequest struct {
 	bidSubsidiseBlock     *BidSubsisideBlockArgs
 }
 
-func parseParams[A any](params []json.RawMessage) (*A, *JSONRPCError) {
+func parseSingleParam[A any](params []json.RawMessage) (*A, *JSONRPCError) {
 	if len(params) != 1 {
 		return nil, errFailToParseRequestParam(errExpectedOneParam)
 	}
@@ -199,31 +199,31 @@ func (prx *Proxy) HandleRequest(req JSONRPCRequest, signer common.Address, publi
 	}
 	switch req.Method {
 	case "eth_sendBundle":
-		ethSendBundle, err := parseParams[EthSendBundleArgs](req.Params)
+		ethSendBundle, err := parseSingleParam[EthSendBundleArgs](req.Params)
 		if err != nil {
 			return err
 		}
 		parsedRequest.ethSendBundle = ethSendBundle
 	case "mev_sendBundle":
-		mevSendBundle, err := parseParams[MevSendBundleArgs](req.Params)
+		mevSendBundle, err := parseSingleParam[MevSendBundleArgs](req.Params)
 		if err != nil {
 			return err
 		}
 		parsedRequest.mevSendBundle = mevSendBundle
 	case "eth_cancelBundle":
-		ethCancelBundle, err := parseParams[EthCancelBundleArgs](req.Params)
+		ethCancelBundle, err := parseSingleParam[EthCancelBundleArgs](req.Params)
 		if err != nil {
 			return err
 		}
 		parsedRequest.ethCancelBundle = ethCancelBundle
 	case "eth_sendRawTransaction":
-		ethSendRawTransaction, err := parseParams[EthSendRawTransactionArgs](req.Params)
+		ethSendRawTransaction, err := parseSingleParam[EthSendRawTransactionArgs](req.Params)
 		if err != nil {
 			return err
 		}
 		parsedRequest.ethSendRawTransaction = ethSendRawTransaction
 	case "bid_subsidiseBlock":
-		bidSubsidiseBlock, err := parseParams[BidSubsisideBlockArgs](req.Params)
+		bidSubsidiseBlock, err := parseSingleParam[BidSubsisideBlockArgs](req.Params)
 		if err != nil {
 			return err
 		}
@@ -234,6 +234,6 @@ func (prx *Proxy) HandleRequest(req JSONRPCRequest, signer common.Address, publi
 	return prx.HandleParsedRequest(parsedRequest)
 }
 
-func (prx *Proxy) HandleParsedRequest(parsedRequset ParsedRequest) *JSONRPCError {
+func (prx *Proxy) HandleParsedRequest(parsedRequest ParsedRequest) *JSONRPCError {
 	return nil
 }
