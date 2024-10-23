@@ -3,9 +3,10 @@ package proxy_test
 import (
 	"encoding/json"
 	"fmt"
+	"testing"
+
 	"github.com/flashbots/tdx-orderflow-proxy/proxy"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestEthSendBundleArgs_Validate(t *testing.T) {
