@@ -255,6 +255,7 @@ type rpcClient struct {
 	customHeaders      map[string]string
 	allowUnknownFields bool
 	defaultRequestID   int
+	signer             *RequestSigner
 }
 
 // RPCClientOpts can be provided to NewClientWithOpts() to change configuration of RPCClient.
@@ -269,6 +270,9 @@ type RPCClientOpts struct {
 	CustomHeaders      map[string]string
 	AllowUnknownFields bool
 	DefaultRequestID   int
+
+	// if Signer is nil we don't sign the request
+	Signer *RequestSigner
 }
 
 // RPCResponses is of type []*RPCResponse.
@@ -348,6 +352,7 @@ func NewClientWithOpts(endpoint string, opts *RPCClientOpts) RPCClient {
 	}
 
 	rpcClient.defaultRequestID = opts.DefaultRequestID
+	rpcClient.signer = opts.Signer
 
 	return rpcClient
 }
@@ -414,6 +419,14 @@ func (client *rpcClient) newRequest(ctx context.Context, req interface{}) (*http
 
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+
+	if client.signer != nil {
+		signature, err := client.signer.SignRequestBodyReturnHeader(body)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set(SignatureHeader, signature)
+	}
 
 	// set default headers first, so that even content type and accept can be overwritten
 	for k, v := range client.customHeaders {

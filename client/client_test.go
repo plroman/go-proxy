@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/flashbots/go-utils/signature"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -998,6 +999,35 @@ func TestErrorHandling(t *testing.T) {
 		check.Equal("123: something wrong", call.Error.Error())
 		check.Contains(err.(*HTTPError).Error(), "status code: 500. rpc response error: 123: something wrong")
 	})
+}
+
+func TestSignedRequest(t *testing.T) {
+	check := assert.New(t)
+	signer, _ := RandomSigner()
+	rpcClient := NewClientWithOpts(httpServer.URL, &RPCClientOpts{
+		Signer: signer,
+	})
+
+	res, err := rpcClient.Call(context.Background(), "something", 1, 2, 3)
+	reqObject := <-requestChan
+	check.Nil(err)
+	check.NotNil(res)
+	header := reqObject.request.Header.Get(SignatureHeader)
+	recoveredAddress, err := signature.Verify(header, []byte(reqObject.body))
+	check.Nil(err)
+	check.Equal(signer.Address(), recoveredAddress)
+}
+
+func TestUnsignedRequest(t *testing.T) {
+	check := assert.New(t)
+	rpcClient := NewClient(httpServer.URL)
+
+	res, err := rpcClient.Call(context.Background(), "something", 1, 2, 3)
+	reqObject := <-requestChan
+	check.Nil(err)
+	check.NotNil(res)
+	header := reqObject.request.Header.Get(SignatureHeader)
+	check.Equal("", header)
 }
 
 type Person struct {
