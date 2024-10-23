@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -19,6 +20,9 @@ import (
 
 const (
 	jsonrpcVersion = "2.0"
+	// This error code is set in the error reponse when interacting with Flashbots RPC that has broken error response
+	// see docs for RPCClientOpts.RejectBrokenFlashbotsErrors
+	FlashbotsBrokenErrorResponseCode = -32088
 )
 
 // RPCClient sends JSON-RPC requests over HTTP to the provided JSON-RPC backend.
@@ -250,12 +254,13 @@ func (e *HTTPError) Error() string {
 }
 
 type rpcClient struct {
-	endpoint           string
-	httpClient         *http.Client
-	customHeaders      map[string]string
-	allowUnknownFields bool
-	defaultRequestID   int
-	signer             *RequestSigner
+	endpoint                    string
+	httpClient                  *http.Client
+	customHeaders               map[string]string
+	allowUnknownFields          bool
+	defaultRequestID            int
+	signer                      *RequestSigner
+	rejectBrokenFlashbotsErrors bool
 }
 
 // RPCClientOpts can be provided to NewClientWithOpts() to change configuration of RPCClient.
@@ -271,8 +276,12 @@ type RPCClientOpts struct {
 	AllowUnknownFields bool
 	DefaultRequestID   int
 
-	// if Signer is nil we don't sign the request
+	// If Signer is set requset body will be signed and signature will be set in the X-Flashbots-Signature header
 	Signer *RequestSigner
+	// if true client will return error when server responds with errors like {"error": "text"}
+	// otherwise this response will be converted to equivalent {"error": {"message": "text", "code": FlashbotsBrokenErrorResponseCode}}
+	// Bad errors are always rejected for batch requests
+	RejectBrokenFlashbotsErrors bool
 }
 
 // RPCResponses is of type []*RPCResponse.
@@ -353,6 +362,7 @@ func NewClientWithOpts(endpoint string, opts *RPCClientOpts) RPCClient {
 
 	rpcClient.defaultRequestID = opts.DefaultRequestID
 	rpcClient.signer = opts.Signer
+	rpcClient.rejectBrokenFlashbotsErrors = opts.RejectBrokenFlashbotsErrors
 
 	return rpcClient
 }
@@ -452,16 +462,50 @@ func (client *rpcClient) doCall(ctx context.Context, RPCRequest *RPCRequest) (*R
 	}
 	defer httpResponse.Body.Close()
 
-	var rpcResponse *RPCResponse
-	decoder := json.NewDecoder(httpResponse.Body)
-	if !client.allowUnknownFields {
-		decoder.DisallowUnknownFields()
+	body, err := io.ReadAll(httpResponse.Body)
+	if err != nil {
+		return nil, fmt.Errorf("rpc call %v() on %v: %w", RPCRequest.Method, httpRequest.URL.Redacted(), err)
 	}
-	decoder.UseNumber()
-	err = decoder.Decode(&rpcResponse)
+
+	decodeJSONBody := func(v any) error {
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		if !client.allowUnknownFields {
+			decoder.DisallowUnknownFields()
+		}
+		decoder.UseNumber()
+		return decoder.Decode(v)
+	}
+
+	var (
+		rpcResponse                *RPCResponse
+		brokenErrorResponseHandled bool
+	)
+	err = decodeJSONBody(&rpcResponse)
+
+	// try parse broken Flashbots error
+	if err != nil && !client.rejectBrokenFlashbotsErrors {
+		var brokenErrorResponse *brokenFlashbostErrorResponse
+		// if we have error here we just ingore it and the code below will work with the original error
+		newErr := decodeJSONBody(&brokenErrorResponse)
+		if newErr == nil {
+			rpcResponse = &RPCResponse{
+				JSONRPC: jsonrpcVersion,
+				Result:  nil,
+				Error: &RPCError{
+					Code:    FlashbotsBrokenErrorResponseCode,
+					Message: brokenErrorResponse.Error,
+					Data:    nil,
+				},
+				ID: RPCRequest.ID,
+			}
+			brokenErrorResponseHandled = true
+			err = nil
+		}
+	}
 
 	// parsing error
 	if err != nil {
+
 		// if we have some http error, return it
 		if httpResponse.StatusCode >= 400 {
 			return nil, &HTTPError{
@@ -485,7 +529,7 @@ func (client *rpcClient) doCall(ctx context.Context, RPCRequest *RPCRequest) (*R
 	}
 
 	// if we have a response body, but also a http error situation, return both
-	if httpResponse.StatusCode >= 400 {
+	if !brokenErrorResponseHandled && httpResponse.StatusCode >= 400 {
 		if rpcResponse.Error != nil {
 			return rpcResponse, &HTTPError{
 				Code: httpResponse.StatusCode,
@@ -698,4 +742,8 @@ func (RPCResponse *RPCResponse) GetObject(toType interface{}) error {
 	}
 
 	return nil
+}
+
+type brokenFlashbostErrorResponse struct {
+	Error string `json:"error,omitempty"`
 }

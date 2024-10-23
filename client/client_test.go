@@ -1030,6 +1030,42 @@ func TestUnsignedRequest(t *testing.T) {
 	check.Equal("", header)
 }
 
+func TestCallFlashbots(t *testing.T) {
+	check := assert.New(t)
+	signer, _ := RandomSigner()
+	rpcClient := NewClientWithOpts("https://relay.flashbots.net", &RPCClientOpts{
+		Signer: signer,
+	})
+
+	res, err := rpcClient.Call(context.Background(), "eth_sendBundle", struct{}{})
+	check.Nil(err)
+	check.NotNil(res)
+	check.NotNil(res.Error)
+	check.Equal("unable to parse body as JSON", res.Error.Message)
+	check.Equal(FlashbotsBrokenErrorResponseCode, res.Error.Code)
+}
+
+func TestBrokenFlashbotsErrorResponse(t *testing.T) {
+	oldStatusCode := httpStatusCode
+	oldResponseBody := responseBody
+	defer func() {
+		httpStatusCode = oldStatusCode
+		responseBody = oldResponseBody
+	}()
+
+	check := assert.New(t)
+	rpcClient := NewClient(httpServer.URL)
+
+	responseBody = `{"error":"unknown method: something"}`
+	httpStatusCode = 400
+	res, err := rpcClient.Call(context.Background(), "something", 1, 2, 3)
+	<-requestChan
+	check.Nil(err)
+	check.Nil(res.Result)
+	check.Equal(FlashbotsBrokenErrorResponseCode, res.Error.Code)
+	check.Equal("unknown method: something", res.Error.Message)
+}
+
 type Person struct {
 	Name    string `json:"name"`
 	Age     int    `json:"age"`
