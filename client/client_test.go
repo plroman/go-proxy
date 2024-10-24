@@ -1092,3 +1092,47 @@ type Properties struct {
 	Distance int    `json:"distance"`
 	Color    string `json:"color"`
 }
+
+// benchmarks
+
+func BenchmarkJSONRPCClientNoSignatures(b *testing.B) {
+	benchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		defer r.Body.Close()
+		w.WriteHeader(httpStatusCode)
+		_, _ = w.Write([]byte(`{"result": null}`))
+	}))
+	defer benchServer.Close()
+
+	rpcClient := NewClient(benchServer.URL)
+	responseBody = `{"result": null}`
+	for i := 0; i < b.N; i++ {
+		_, err := rpcClient.Call(context.Background(), "something", 1, 2, 3)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func BenchmarkJSONRPCClientWithSignatures(b *testing.B) {
+	benchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		defer r.Body.Close()
+		w.WriteHeader(httpStatusCode)
+		_, _ = w.Write([]byte(`{"result": null}`))
+	}))
+	defer benchServer.Close()
+
+	signer, _ := RandomSigner()
+	rpcClient := NewClientWithOpts(benchServer.URL, &RPCClientOpts{
+		Signer: signer,
+	})
+
+	responseBody = `{"result": null}`
+	for i := 0; i < b.N; i++ {
+		_, err := rpcClient.Call(context.Background(), "something", 1, 2, 3)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
