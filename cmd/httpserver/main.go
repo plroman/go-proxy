@@ -38,6 +38,11 @@ var flags []cli.Flag = []cli.Flag{
 		Value: "127.0.0.1:8645",
 		Usage: "address to send local ordeflow to",
 	},
+	&cli.StringFlag{
+		Name:  "builder-confighub-endpoint",
+		Value: "127.0.0.1:14892",
+		Usage: "address of the builder config hub enpoint (directly or throught the cvm-proxy)",
+	},
 
 	// certificate config
 	&cli.DurationFlag{
@@ -144,6 +149,8 @@ func main() {
 			builderEndpoint := cCtx.String("builder-endpoint")
 			certDuration := cCtx.Duration("cert-duration")
 			certHosts := cCtx.StringSlice("cert-hosts")
+			builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
+
 			proxyConfig := &proxy.Config{
 				Log:               log,
 				UsersListenAddr:   usersListenAddr,
@@ -154,7 +161,7 @@ func main() {
 				CertValidDuration: certDuration,
 				CertHosts:         certHosts,
 
-				BuilderConfigHub: proxy.MockBuilderConfigHub{},
+				BuilderConfigHub: proxy.NewBuilderConfigHub(builderConfigHubEndpoint),
 			}
 
 			proxy, err := proxy.New(*proxyConfig)

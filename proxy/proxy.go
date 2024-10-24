@@ -97,12 +97,12 @@ func (prx *Proxy) GenerateAndPublish() error {
 
 	prx.log.Info("Generated ordeflow signer", "address", orderflowSigner)
 
-	selfInfo := BuilderInfo{
-		Cert:            cert,
-		OrderflowSigner: orderflowSigner,
+	selfInfo := ConfighubOrderflowProxyCredentials{
+		TLSCert:            string(cert),
+		EcdsaPubkeyAddress: orderflowSigner,
 	}
 
-	err = prx.Config.BuilderConfigHub.PublishConfig(selfInfo)
+	err = prx.Config.BuilderConfigHub.RegisterCredentials(selfInfo)
 	if err != nil {
 		return err
 	}
