@@ -4,8 +4,10 @@ import (
 	"crypto/tls"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/flashbots/go-utils/rpcclient"
 	"github.com/flashbots/go-utils/signature"
 )
@@ -19,19 +21,23 @@ type NewProxy struct {
 	PublicCertPEM   []byte
 	Certificate     tls.Certificate
 
-	LocalBuilder rpcclient.RPCClient
+	localBuilder rpcclient.RPCClient
 
 	PublicHandler http.Handler
 	LocalHandler  http.Handler
 	CertHandler   http.Handler // this endpoint just returns generated certificate
 
-	UpdatePeers chan []ConfighubBuilder
+	updatePeers chan []ConfighubBuilder
 	shareQueue  chan *ParsedRequest
+
+	peersMu          sync.RWMutex
+	lastFetchedPeers []ConfighubBuilder
 }
 
 type NewProxyConstantConfig struct {
-	Log  *slog.Logger
-	Name string
+	Log                    *slog.Logger
+	Name                   string
+	FlashbotsSignerAddress common.Address
 }
 
 type NewProxyConfig struct {
@@ -67,7 +73,7 @@ func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
 		OrderflowSigner:        orderflowSigner,
 		PublicCertPEM:          cert,
 		Certificate:            certificate,
-		LocalBuilder:           localBuilder,
+		localBuilder:           localBuilder,
 	}
 
 	publicHandler, err := prx.PublicJSONRPCHandler()
@@ -91,13 +97,13 @@ func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
 	shareQeueuCh := make(chan *ParsedRequest)
 	updatePeersCh := make(chan []ConfighubBuilder)
 	prx.shareQueue = shareQeueuCh
-	prx.UpdatePeers = updatePeersCh
+	prx.updatePeers = updatePeersCh
 	queue := ShareQueue{
 		name:         prx.Name,
 		log:          prx.Log,
 		queue:        shareQeueuCh,
 		updatePeers:  updatePeersCh,
-		localBuilder: prx.LocalBuilder,
+		localBuilder: prx.localBuilder,
 		singer:       prx.OrderflowSigner,
 	}
 	go queue.Run()
@@ -125,8 +131,13 @@ func (prx *NewProxy) RequestNewPeers() error {
 	if err != nil {
 		return err
 	}
+
+	prx.peersMu.Lock()
+	prx.lastFetchedPeers = builders
+	prx.peersMu.Unlock()
+
 	select {
-	case prx.UpdatePeers <- builders:
+	case prx.updatePeers <- builders:
 	default:
 	}
 	return nil

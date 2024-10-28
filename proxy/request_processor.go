@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flashbots/go-utils/rpcserver"
@@ -11,12 +12,22 @@ import (
 const maxRequestBodySizeBytes = 30 * 1024 * 1024 // 30 MB, @configurable
 
 const (
-	SendBundleMethod = "eth_sendBundle"
+	EthSendBundleMethod         = "eth_sendBundle"
+	MevSendBundleMethod         = "mev_sendBundle"
+	EthCancelBundleMethod       = "eth_cancelBundle"
+	EthSendRawTransactionMethod = "eth_sendRawTransaction"
+	BidSubsidiseBlockMethod     = "bid_subsidiseBlock"
 )
+
+var errUnknownPeer = errors.New("unknown peers can't send to the public address")
 
 func (prx *NewProxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
-		SendBundleMethod: prx.SendBundlePublic,
+		EthSendBundleMethod:         prx.EthSendBundlePublic,
+		MevSendBundleMethod:         prx.MevSendBundlePublic,
+		EthCancelBundleMethod:       prx.EthCancelBundlePublic,
+		EthSendRawTransactionMethod: prx.EthSendRawTransactionPublic,
+		BidSubsidiseBlockMethod:     prx.BidSubsidiseBlockPublic,
 	},
 		rpcserver.JSONRPCHandlerOpts{
 			Log:                              prx.Log,
@@ -30,7 +41,11 @@ func (prx *NewProxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 
 func (prx *NewProxy) LocalJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
-		SendBundleMethod: prx.SendBundleLocal,
+		EthSendBundleMethod:         prx.EthSendBundleLocal,
+		MevSendBundleMethod:         prx.MevSendBundleLocal,
+		EthCancelBundleMethod:       prx.EthCancelBundleLocal,
+		EthSendRawTransactionMethod: prx.EthSendRawTransactionLocal,
+		BidSubsidiseBlockMethod:     prx.BidSubsidiseBlockLocal,
 	},
 		rpcserver.JSONRPCHandlerOpts{
 			Log:                              prx.Log,
@@ -42,28 +57,146 @@ func (prx *NewProxy) LocalJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 	return handler, err
 }
 
-func (prx *NewProxy) SendBundlePublic(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
-	signer := rpcserver.GetSigner(ctx)
-	// signer must be one of the peers
+// IsValidPublicSigner verifies if signer is a valid peer
+func (prx *NewProxy) IsValidPublicSigner(address common.Address) bool {
+	if address == prx.FlashbotsSignerAddress {
+		return true
+	}
+	prx.peersMu.RLock()
+	found := false
+	for _, peer := range prx.lastFetchedPeers {
+		if address == peer.OrderflowProxy.EcdsaPubkeyAddress {
+			found = true
+			break
+		}
+	}
+	prx.peersMu.RUnlock()
+	return found
+}
+
+func (prx *NewProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
 	// TODO: validate args
+	signer := rpcserver.GetSigner(ctx)
+	if publicEndpoint {
+		if !prx.IsValidPublicSigner(signer) {
+			return errUnknownPeer
+		}
+	} else {
+		ethSendBundle.SigningAddress = &signer
+	}
 	parsedRequest := ParsedRequest{
-		publicEndpoint: true,
+		publicEndpoint: publicEndpoint,
 		signer:         signer,
 		ethSendBundle:  &ethSendBundle,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
-func (prx *NewProxy) SendBundleLocal(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
+func (prx *NewProxy) EthSendBundlePublic(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
+	return prx.EthSendBundle(ctx, ethSendBundle, true)
+}
+
+func (prx *NewProxy) EthSendBundleLocal(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
+	return prx.EthSendBundle(ctx, ethSendBundle, false)
+}
+
+func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
+	// TODO: validate args, handle cancellations
 	signer := rpcserver.GetSigner(ctx)
-	// TODO: validate args
-	ethSendBundle.SigningAddress = &signer
+	if publicEndpoint {
+		if !prx.IsValidPublicSigner(signer) {
+			return errUnknownPeer
+		}
+	} else {
+		mevSendBundle.Metadata.Signer = &signer
+	}
 	parsedRequest := ParsedRequest{
-		publicEndpoint: false,
+		publicEndpoint: publicEndpoint,
 		signer:         signer,
-		ethSendBundle:  &ethSendBundle,
+		mevSendBundle:  &mevSendBundle,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
+}
+
+func (prx *NewProxy) MevSendBundlePublic(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
+	return prx.MevSendBundle(ctx, mevSendBundle, true)
+}
+
+func (prx *NewProxy) MevSendBundleLocal(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
+	return prx.MevSendBundle(ctx, mevSendBundle, false)
+}
+
+func (prx *NewProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
+	// TODO: validate args
+	signer := rpcserver.GetSigner(ctx)
+	if publicEndpoint {
+		if !prx.IsValidPublicSigner(signer) {
+			return errUnknownPeer
+		}
+	} else {
+		ethCancelBundle.SigningAddress = &signer
+	}
+	parsedRequest := ParsedRequest{
+		publicEndpoint:  publicEndpoint,
+		signer:          signer,
+		ethCancelBundle: &ethCancelBundle,
+	}
+	return prx.HandleParsedRequest(ctx, parsedRequest)
+}
+
+func (prx *NewProxy) EthCancelBundlePublic(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
+	return prx.EthCancelBundle(ctx, ethCancelBundle, true)
+}
+
+func (prx *NewProxy) EthCancelBundleLocal(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
+	return prx.EthCancelBundle(ctx, ethCancelBundle, false)
+}
+
+func (prx *NewProxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs, publicEndpoint bool) error {
+	// TODO: convert to mev send bundle when sharing
+	signer := rpcserver.GetSigner(ctx)
+	if publicEndpoint {
+		if !prx.IsValidPublicSigner(signer) {
+			return errUnknownPeer
+		}
+	}
+	parsedRequest := ParsedRequest{
+		publicEndpoint:        publicEndpoint,
+		signer:                signer,
+		ethSendRawTransaction: &ethSendRawTransaction,
+	}
+	return prx.HandleParsedRequest(ctx, parsedRequest)
+}
+
+func (prx *NewProxy) EthSendRawTransactionPublic(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
+	return prx.EthSendRawTransaction(ctx, ethSendRawTransaction, true)
+}
+
+func (prx *NewProxy) EthSendRawTransactionLocal(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
+	return prx.EthSendRawTransaction(ctx, ethSendRawTransaction, false)
+}
+
+func (prx *NewProxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs, publicEndpoint bool) error {
+	signer := rpcserver.GetSigner(ctx)
+	if publicEndpoint {
+		if signer != prx.FlashbotsSignerAddress {
+			return errUnknownPeer
+		}
+	}
+	parsedRequest := ParsedRequest{
+		publicEndpoint:    publicEndpoint,
+		signer:            signer,
+		bidSubsidiseBlock: &bidSubsidiseBlock,
+	}
+	return prx.HandleParsedRequest(ctx, parsedRequest)
+}
+
+func (prx *NewProxy) BidSubsidiseBlockPublic(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
+	return prx.BidSubsidiseBlock(ctx, bidSubsidiseBlock, true)
+}
+
+func (prx *NewProxy) BidSubsidiseBlockLocal(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
+	return prx.BidSubsidiseBlock(ctx, bidSubsidiseBlock, false)
 }
 
 type ParsedRequest struct {
@@ -78,50 +211,11 @@ type ParsedRequest struct {
 
 func (prx *NewProxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
 	// share with others
-	// @bug can this block?
-	prx.shareQueue <- &parsedRequest
+	select {
+	case <-ctx.Done():
+	case prx.shareQueue <- &parsedRequest:
+	}
+	// TODO: archive queue
 	// prx.archiveQueue <- &parsedRequest
 	return nil
 }
-
-// func (prx *Proxy) HandleRequest(req JSONRPCRequest, signer common.Address, publicEndpoint bool) *JSONRPCError {
-// 	parsedRequest := ParsedRequest{
-// 		publicEndpoint: publicEndpoint,
-// 		signer:         signer,
-// 	}
-// 	switch req.Method {
-// 	case "eth_sendBundle":
-// 		ethSendBundle, err := parseSingleParam[EthSendBundleArgs](req.Params)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		parsedRequest.ethSendBundle = ethSendBundle
-// 	case "mev_sendBundle":
-// 		mevSendBundle, err := parseSingleParam[MevSendBundleArgs](req.Params)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		parsedRequest.mevSendBundle = mevSendBundle
-// 	case "eth_cancelBundle":
-// 		ethCancelBundle, err := parseSingleParam[EthCancelBundleArgs](req.Params)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		parsedRequest.ethCancelBundle = ethCancelBundle
-// 	case "eth_sendRawTransaction":
-// 		ethSendRawTransaction, err := parseSingleParam[EthSendRawTransactionArgs](req.Params)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		parsedRequest.ethSendRawTransaction = ethSendRawTransaction
-// 	case "bid_subsidiseBlock":
-// 		bidSubsidiseBlock, err := parseSingleParam[BidSubsisideBlockArgs](req.Params)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		parsedRequest.bidSubsidiseBlock = bidSubsidiseBlock
-// 	default:
-// 		return &errMethodNotFound
-// 	}
-// 	return prx.HandleParsedRequest(parsedRequest)
-// }

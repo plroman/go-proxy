@@ -88,7 +88,7 @@ func (sq *ShareQueue) proxyRequests(ch chan *ParsedRequest, client rpcclient.RPC
 		defer cancel()
 		if req.ethSendBundle != nil {
 			// log
-			_, _ = client.Call(ctx, SendBundleMethod, req.ethSendBundle)
+			_, _ = client.Call(ctx, EthSendBundleMethod, req.ethSendBundle)
 		}
 		sq.log.Debug("Message proxied", slog.String("target", name), slog.String("name", sq.name))
 	}

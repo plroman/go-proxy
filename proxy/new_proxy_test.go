@@ -78,7 +78,7 @@ func StartTestOrderflowProxy(name string) (*OrderflowProxyTestSetup, error) {
 	if err != nil {
 		return nil, err
 	}
-	go publicProxyServer.ServeTLS(publicListener, "", "")
+	go publicProxyServer.ServeTLS(publicListener, "", "") //nolint: errcheck
 	publicServerEndpoint := fmt.Sprintf("https://localhost:%d", publicListener.Addr().(*net.TCPAddr).Port)
 	ip := fmt.Sprintf("127.0.0.1:%d", publicListener.Addr().(*net.TCPAddr).Port)
 
@@ -90,7 +90,7 @@ func StartTestOrderflowProxy(name string) (*OrderflowProxyTestSetup, error) {
 	if err != nil {
 		return nil, err
 	}
-	go localProxyServer.ServeTLS(localListener, "", "")
+	go localProxyServer.ServeTLS(localListener, "", "") //nolint:errcheck
 	localServerEndpoint := fmt.Sprintf("https://localhost:%d", localListener.Addr().(*net.TCPAddr).Port)
 
 	certProxyServer := httptest.NewServer(proxy.CertHandler)
@@ -223,6 +223,14 @@ func expectNoRequest(t *testing.T, ch chan *RequestData) {
 	}
 }
 
+func proxiesUpdatePeers(t *testing.T) {
+	for _, instance := range proxies {
+		err := instance.proxy.RequestNewPeers()
+		require.NoError(t, err)
+	}
+	time.Sleep(time.Millisecond * 50)
+}
+
 func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
@@ -235,11 +243,9 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	builderHubPeers = nil
 	err = proxies[0].proxy.RegisterSecrets()
 	require.NoError(t, err)
-	err = proxies[0].proxy.RequestNewPeers()
-	require.NoError(t, err)
-	time.Sleep(time.Millisecond * 50)
+	proxiesUpdatePeers(t)
 
-	_, err = client.Call(context.Background(), SendBundleMethod, &rpctypes.EthSendBundleArgs{
+	_, err = client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
 		BlockNumber: 1000,
 	})
 	require.NoError(t, err)
@@ -252,12 +258,9 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	// add one more peer
 	err = proxies[1].proxy.RegisterSecrets()
 	require.NoError(t, err)
+	proxiesUpdatePeers(t)
 
-	err = proxies[0].proxy.RequestNewPeers()
-	require.NoError(t, err)
-	time.Sleep(time.Millisecond * 50)
-
-	_, err = client.Call(context.Background(), SendBundleMethod, &rpctypes.EthSendBundleArgs{
+	_, err = client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
 		BlockNumber: 1000,
 	})
 	require.NoError(t, err)
@@ -271,12 +274,9 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	// add another peer
 	err = proxies[2].proxy.RegisterSecrets()
 	require.NoError(t, err)
+	proxiesUpdatePeers(t)
 
-	err = proxies[0].proxy.RequestNewPeers()
-	require.NoError(t, err)
-	time.Sleep(time.Millisecond * 50)
-
-	_, err = client.Call(context.Background(), SendBundleMethod, &rpctypes.EthSendBundleArgs{
+	_, err = client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
 		BlockNumber: 1000,
 	})
 	require.NoError(t, err)
