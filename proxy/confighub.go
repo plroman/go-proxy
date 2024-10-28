@@ -17,36 +17,22 @@ type ConfighubOrderflowProxyCredentials struct {
 }
 
 type ConfighubBuilder struct {
+	Name           string                             `json:"name"`
 	IP             string                             `json:"ip"`
 	OrderflowProxy ConfighubOrderflowProxyCredentials `json:"orderflow_proxy"`
 }
 
-type BuilderConfigHub interface {
-	RegisterCredentials(args ConfighubOrderflowProxyCredentials) error
-	Builders() ([]ConfighubBuilder, error)
-}
-
-type MockBuilderConfigHub struct{}
-
-func (m MockBuilderConfigHub) RegisterCredentials(info ConfighubOrderflowProxyCredentials) error {
-	return nil
-}
-
-func (m MockBuilderConfigHub) Builders() ([]ConfighubBuilder, error) {
-	return nil, nil
-}
-
-type builderConfigHubImpl struct {
+type BuilderConfigHub struct {
 	endpoint string
 }
 
-func NewBuilderConfigHub(endpoint string) BuilderConfigHub {
-	return &builderConfigHubImpl{
+func NewBuilderConfigHub(endpoint string) *BuilderConfigHub {
+	return &BuilderConfigHub{
 		endpoint: endpoint,
 	}
 }
 
-func (b *builderConfigHubImpl) RegisterCredentials(info ConfighubOrderflowProxyCredentials) error {
+func (b *BuilderConfigHub) RegisterCredentials(info ConfighubOrderflowProxyCredentials) error {
 	body, err := json.Marshal(info)
 	if err != nil {
 		return err
@@ -63,7 +49,7 @@ func (b *builderConfigHubImpl) RegisterCredentials(info ConfighubOrderflowProxyC
 	return nil
 }
 
-func (b *builderConfigHubImpl) Builders() ([]ConfighubBuilder, error) {
+func (b *BuilderConfigHub) Builders() ([]ConfighubBuilder, error) {
 	resp, err := http.Get(b.endpoint + "/api/l1-builder/v1/builders")
 	if err != nil {
 		return nil, err

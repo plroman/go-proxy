@@ -149,7 +149,7 @@ func main() {
 			builderEndpoint := cCtx.String("builder-endpoint")
 			certDuration := cCtx.Duration("cert-duration")
 			certHosts := cCtx.StringSlice("cert-hosts")
-			builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
+			// builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
 
 			proxyConfig := &proxy.Config{
 				Log:               log,
@@ -160,8 +160,6 @@ func main() {
 
 				CertValidDuration: certDuration,
 				CertHosts:         certHosts,
-
-				BuilderConfigHub: proxy.NewBuilderConfigHub(builderConfigHubEndpoint),
 			}
 
 			proxy, err := proxy.New(*proxyConfig)
