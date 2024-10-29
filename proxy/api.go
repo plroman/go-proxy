@@ -23,10 +23,11 @@ const (
 )
 
 var (
-	errUnknownPeer = errors.New("unknown peers can't send to the public address")
-
+	errUnknownPeer          = errors.New("unknown peers can't send to the public address")
 	errSubsidyWrongEndpoint = errors.New("subsidy can only be called on public method")
 	errSubsidyWrongCaller   = errors.New("subsidy can only be called by Flashbots")
+
+	apiNow = time.Now
 )
 
 func (prx *NewProxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
@@ -124,7 +125,9 @@ func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.M
 			return errUnknownPeer
 		}
 	} else {
-		mevSendBundle.Metadata.Signer = &signer
+		mevSendBundle.Metadata = &rpctypes.MevBundleMetadata{
+			Signer: &signer,
+		}
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
@@ -236,7 +239,7 @@ type ParsedRequest struct {
 }
 
 func (prx *NewProxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
-	parsedRequest.receivedAt = time.Now()
+	parsedRequest.receivedAt = apiNow()
 	select {
 	case <-ctx.Done():
 	case prx.shareQueue <- &parsedRequest:

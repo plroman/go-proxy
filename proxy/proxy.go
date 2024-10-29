@@ -173,3 +173,8 @@ func (prx *NewProxy) RequestNewPeers() error {
 	}
 	return nil
 }
+
+// FlushArchiveQueue forces the archive queue to flush
+func (prx *NewProxy) FlushArchiveQueue() {
+	prx.archiveFlushQueue <- struct{}{}
+}

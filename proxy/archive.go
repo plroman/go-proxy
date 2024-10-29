@@ -46,6 +46,7 @@ func (aq *ArchiveQueue) Run() {
 
 		if needFlush {
 			aq.flush(pendingBatch)
+			pendingBatch = nil
 		}
 
 		forceFlush = false
@@ -177,7 +178,7 @@ func (aq *ArchiveQueue) flush(batch []*ParsedRequest) {
 	if err != nil {
 		aq.log.Error("Error while making RPC request to archive", slog.Any("error", err))
 	}
-	if res.Error != nil {
+	if res != nil && res.Error != nil {
 		aq.log.Error("Archive returned error", slog.Any("error", res.Error))
 	}
 }
