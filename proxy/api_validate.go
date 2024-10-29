@@ -18,7 +18,7 @@ var (
 )
 
 func ValidateEthSendBundle(args *rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
-	if publicEndpoint {
+	if !publicEndpoint {
 		if args.SigningAddress != nil {
 			return errSigningAddress
 		}
@@ -46,7 +46,7 @@ func ValidateEthSendBundle(args *rpctypes.EthSendBundleArgs, publicEndpoint bool
 }
 
 func ValidateEthCancelBundle(args *rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
-	if publicEndpoint {
+	if !publicEndpoint {
 		if args.SigningAddress != nil {
 			return errSigningAddress
 		}

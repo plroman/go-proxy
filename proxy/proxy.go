@@ -97,7 +97,9 @@ func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
 	prx.CertHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Content-Type", "application/octet-stream")
 		_, err := w.Write([]byte(prx.PublicCertPEM))
-		prx.Log.Warn("Failed to serve certificate", slog.Any("error", err))
+		if err != nil {
+			prx.Log.Warn("Failed to serve certificate", slog.Any("error", err))
+		}
 	})
 
 	shareQeueuCh := make(chan *ParsedRequest)

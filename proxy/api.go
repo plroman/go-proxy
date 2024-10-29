@@ -83,6 +83,10 @@ func (prx *NewProxy) IsValidPublicSigner(address common.Address) bool {
 }
 
 func (prx *NewProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
+	err := ValidateEthSendBundle(&ethSendBundle, publicEndpoint)
+	if err != nil {
+		return err
+	}
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -90,10 +94,6 @@ func (prx *NewProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.E
 		}
 	} else {
 		ethSendBundle.SigningAddress = &signer
-	}
-	err := ValidateEthSendBundle(&ethSendBundle, publicEndpoint)
-	if err != nil {
-		return err
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
@@ -114,6 +114,10 @@ func (prx *NewProxy) EthSendBundleLocal(ctx context.Context, ethSendBundle rpcty
 
 func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
 	// TODO: make sure that cancellations are handled
+	err := ValidateMevSendBundle(&mevSendBundle, publicEndpoint)
+	if err != nil {
+		return err
+	}
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -121,10 +125,6 @@ func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.M
 		}
 	} else {
 		mevSendBundle.Metadata.Signer = &signer
-	}
-	err := ValidateMevSendBundle(&mevSendBundle, publicEndpoint)
-	if err != nil {
-		return err
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
@@ -144,6 +144,10 @@ func (prx *NewProxy) MevSendBundleLocal(ctx context.Context, mevSendBundle rpcty
 }
 
 func (prx *NewProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
+	err := ValidateEthCancelBundle(&ethCancelBundle, publicEndpoint)
+	if err != nil {
+		return err
+	}
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -151,10 +155,6 @@ func (prx *NewProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctyp
 		}
 	} else {
 		ethCancelBundle.SigningAddress = &signer
-	}
-	err := ValidateEthCancelBundle(&ethCancelBundle, publicEndpoint)
-	if err != nil {
-		return err
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint:  publicEndpoint,

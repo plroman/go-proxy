@@ -35,7 +35,7 @@ func (sq *ShareQueue) Run() {
 	for {
 		select {
 		case req, more := <-sq.queue:
-			sq.log.Info("Received req", slog.String("name", sq.name))
+			sq.log.Debug("Received request", slog.String("name", sq.name), slog.String("method", req.method))
 			if !more {
 				return
 			}
@@ -81,6 +81,7 @@ func (sq *ShareQueue) Run() {
 }
 
 func (sq *ShareQueue) proxyRequests(ch chan *ParsedRequest, client rpcclient.RPCClient, name string) {
+	logger := sq.log.With(slog.String("target", name), slog.String("name", sq.name))
 	for {
 		req, more := <-ch
 		if !more {
@@ -88,10 +89,35 @@ func (sq *ShareQueue) proxyRequests(ch chan *ParsedRequest, client rpcclient.RPC
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 		defer cancel()
+		var (
+			method string
+			data   any
+		)
 		if req.ethSendBundle != nil {
-			// log
-			_, _ = client.Call(ctx, EthSendBundleMethod, req.ethSendBundle)
+			method = EthSendBundleMethod
+			data = req.ethSendBundle
+		} else if req.mevSendBundle != nil {
+			method = MevSendBundleMethod
+			data = req.mevSendBundle
+		} else if req.ethCancelBundle != nil {
+			method = EthCancelBundleMethod
+			data = req.ethCancelBundle
+		} else if req.ethSendRawTransaction != nil {
+			method = EthSendRawTransactionMethod
+			data = req.ethSendRawTransaction
+		} else if req.bidSubsidiseBlock != nil {
+			continue
+		} else {
+			logger.Error("Unknown request type", slog.String("name", sq.name))
+			continue
 		}
-		sq.log.Debug("Message proxied", slog.String("target", name), slog.String("name", sq.name))
+		resp, err := client.Call(ctx, method, data)
+		if err != nil {
+			logger.Warn("Error while proxying request", slog.Any("error", err))
+		}
+		if resp != nil && resp.Error != nil {
+			logger.Warn("Error returned form target while proxying", slog.Any("error", resp.Error))
+		}
+		logger.Debug("Message proxied")
 	}
 }

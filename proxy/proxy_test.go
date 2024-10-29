@@ -246,15 +246,18 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	require.NoError(t, err)
 	proxiesUpdatePeers(t)
 
-	_, err = client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
+	resp, err := client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
 		BlockNumber: 1000,
 	})
 	require.NoError(t, err)
+	require.Nil(t, resp.Error)
 
 	builderRequest := expectRequest(t, proxies[0].localBuilderRequests)
 	require.Equal(t, expectedRequest, builderRequest.body)
 	expectNoRequest(t, proxies[1].localBuilderRequests)
 	expectNoRequest(t, proxies[2].localBuilderRequests)
+
+	slog.Info("Adding first peer")
 
 	// add one more peer
 	err = proxies[1].proxy.RegisterSecrets()
@@ -273,6 +276,8 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	expectNoRequest(t, proxies[2].localBuilderRequests)
 
 	// add another peer
+	slog.Info("Adding second peer")
+
 	err = proxies[2].proxy.RegisterSecrets()
 	require.NoError(t, err)
 	proxiesUpdatePeers(t)

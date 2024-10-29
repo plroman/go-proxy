@@ -36,22 +36,22 @@ var flags []cli.Flag = []cli.Flag{
 	},
 	&cli.StringFlag{
 		Name:  "builder-endpoint",
-		Value: "127.0.0.1:8645",
+		Value: "http://127.0.0.1:8645",
 		Usage: "address to send local ordeflow to",
 	},
 	&cli.StringFlag{
 		Name:  "rpc-endpoint",
-		Value: "127.0.0.1:8545",
+		Value: "http://127.0.0.1:8545",
 		Usage: "address of the node RPC that supports eth_blockNumber",
 	},
 	&cli.StringFlag{
 		Name:  "builder-confighub-endpoint",
-		Value: "127.0.0.1:14892",
+		Value: "http://127.0.0.1:14892",
 		Usage: "address of the builder config hub enpoint (directly or throught the cvm-proxy)",
 	},
 	&cli.StringFlag{
 		Name:  "orderflow-archive-endpoint",
-		Value: "127.0.0.1:14893",
+		Value: "http://127.0.0.1:14893",
 		Usage: "address of the ordreflow archive endpoint (block-processor)",
 	},
 	&cli.StringFlag{
