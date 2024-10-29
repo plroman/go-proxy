@@ -4,9 +4,11 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/flashbots/go-utils/rpcclient"
 	"github.com/flashbots/go-utils/rpctypes"
 )
@@ -18,13 +20,16 @@ var (
 	ArchiveBatchSize = 100
 	// ArchiveBatchSizeFlushTimeout is a timeout to force flush the batch to the archive
 	ArchiveBatchSizeFlushTimeout = time.Second * 6
+
+	errArchivePublicRequest = errors.New("public RPC request should not reach archive")
 )
 
 type ArchiveQueue struct {
-	log           *slog.Logger
-	queue         chan *ParsedRequest
-	flushQueue    chan struct{}
-	archiveClient rpcclient.RPCClient
+	log               *slog.Logger
+	queue             chan *ParsedRequest
+	flushQueue        chan struct{}
+	archiveClient     rpcclient.RPCClient
+	blockNumberSource *BlockNumberSource
 }
 
 func (aq *ArchiveQueue) Run() {
@@ -74,12 +79,34 @@ func (aq *ArchiveQueue) Run() {
 // result can be nil without error meaning we don't need to archive that
 func (aq *ArchiveQueue) updateParsedRequest(input *ParsedRequest) (*ParsedRequest, error) {
 	if input.publicEndpoint {
-		return nil, nil
+		return nil, errArchivePublicRequest
 	}
 	if input.bidSubsidiseBlock != nil {
 		return nil, nil
 	}
-	// TODO: convert raw transaction to mev send bundle
+	if input.ethSendRawTransaction != nil {
+		var mevSendBundle rpctypes.MevSendBundleArgs
+		block, err := aq.blockNumberSource.BlockNumber()
+		if err != nil {
+			return nil, err
+		}
+		mevSendBundle.Version = "v0.1"
+		mevSendBundle.Inclusion.BlockNumber = hexutil.Uint64(block)
+		mevSendBundle.Inclusion.MaxBlock = hexutil.Uint64(block + 5)
+		mevSendBundle.Body = []rpctypes.MevBundleBody{{Tx: (*hexutil.Bytes)(input.ethSendRawTransaction), CanRevert: true}}
+		signer := input.signer
+		mevSendBundle.Metadata = &rpctypes.MevBundleMetadata{
+			Signer: &signer,
+		}
+
+		input = &ParsedRequest{
+			publicEndpoint: input.publicEndpoint,
+			signer:         input.signer,
+			method:         input.method,
+			receivedAt:     input.receivedAt,
+			mevSendBundle:  &mevSendBundle,
+		}
+	}
 	return input, nil
 }
 

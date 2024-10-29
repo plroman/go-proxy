@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/VictoriaMetrics/metrics"
+	eth "github.com/ethereum/go-ethereum/common"
 	"github.com/flashbots/tdx-orderflow-proxy/common"
 	"github.com/flashbots/tdx-orderflow-proxy/proxy"
 	"github.com/google/uuid"
@@ -39,9 +40,29 @@ var flags []cli.Flag = []cli.Flag{
 		Usage: "address to send local ordeflow to",
 	},
 	&cli.StringFlag{
+		Name:  "rpc-endpoint",
+		Value: "127.0.0.1:8545",
+		Usage: "address of the node RPC that supports eth_blockNumber",
+	},
+	&cli.StringFlag{
 		Name:  "builder-confighub-endpoint",
 		Value: "127.0.0.1:14892",
 		Usage: "address of the builder config hub enpoint (directly or throught the cvm-proxy)",
+	},
+	&cli.StringFlag{
+		Name:  "orderflow-archive-endpoint",
+		Value: "127.0.0.1:14893",
+		Usage: "address of the ordreflow archive endpoint (block-processor)",
+	},
+	&cli.StringFlag{
+		Name:  "builder-name",
+		Value: "test-builder",
+		Usage: "name of this builder (same as in confighub)",
+	},
+	&cli.StringFlag{
+		Name:  "flashbots-orderflow-signer-address",
+		Value: "0x5015Fa72E34f75A9eC64f44a4Fcf0837919D1bB7",
+		Usage: "ordreflow from Flashbots will be signed with this address",
 	},
 
 	// certificate config
@@ -143,43 +164,53 @@ func main() {
 				}
 			}()
 
-			usersListenAddr := cCtx.String("users-listen-addr")
-			networkListenAddr := cCtx.String("network-listen-addr")
-			certListenAddr := cCtx.String("cert-listen-addr")
 			builderEndpoint := cCtx.String("builder-endpoint")
+			rpcEndpoint := cCtx.String("rpc-endpoint")
 			certDuration := cCtx.Duration("cert-duration")
 			certHosts := cCtx.StringSlice("cert-hosts")
-			// builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
+			builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
+			archiveEndpoint := cCtx.String("orderflow-archive-endpoint")
+			name := cCtx.String("builder-name")
+			flashbotsSignerStr := cCtx.String("flashbots-orderflow-signer-address")
+			flashbotsSignerAddress := eth.HexToAddress(flashbotsSignerStr)
 
-			proxyConfig := &proxy.Config{
-				Log:               log,
-				UsersListenAddr:   usersListenAddr,
-				NetworkListenAddr: networkListenAddr,
-				CertListenAddr:    certListenAddr,
-				BuilderEndpoint:   builderEndpoint,
-
-				CertValidDuration: certDuration,
-				CertHosts:         certHosts,
+			proxyConfig := &proxy.NewProxyConfig{
+				NewProxyConstantConfig: proxy.NewProxyConstantConfig{
+					Log:                    log,
+					Name:                   name,
+					FlashbotsSignerAddress: flashbotsSignerAddress,
+				},
+				CertValidDuration:        certDuration,
+				CertHosts:                certHosts,
+				BuilderConfigHubEndpoint: builderConfigHubEndpoint,
+				ArchiveEndpoint:          archiveEndpoint,
+				LocalBuilderEndpoint:     builderEndpoint,
+				EthRPC:                   rpcEndpoint,
 			}
 
-			proxy, err := proxy.New(*proxyConfig)
+			instance, err := proxy.NewNewProxy(*proxyConfig)
 			if err != nil {
 				log.Error("failed to create proxy server", "err", err)
 				return err
 			}
-			err = proxy.GenerateAndPublish()
+			err = instance.RegisterSecrets()
 			if err != nil {
 				log.Error("failed to generate and publish secrets", "err", err)
 				return err
 			}
 
-			err = proxy.StartServersInBackground()
+			usersListenAddr := cCtx.String("users-listen-addr")
+			networkListenAddr := cCtx.String("network-listen-addr")
+			certListenAddr := cCtx.String("cert-listen-addr")
+
+			servers, err := proxy.StartServers(instance, networkListenAddr, usersListenAddr, certListenAddr)
 			if err != nil {
 				log.Error("failed to start proxy server", "err", err)
 				return err
 			}
 
 			<-exit
+			servers.Stop()
 			return nil
 		},
 	}

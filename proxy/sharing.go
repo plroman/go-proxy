@@ -1,5 +1,7 @@
 package proxy
 
+// TODO: use multiple connections / senders per receiver
+
 import (
 	"context"
 	"log/slog"

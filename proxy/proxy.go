@@ -1,167 +1,173 @@
 package proxy
 
 import (
-	"bytes"
-	"crypto/ecdsa"
 	"crypto/tls"
-	"errors"
-	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/flashbots/tdx-orderflow-proxy/metrics"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/flashbots/go-utils/rpcclient"
+	"github.com/flashbots/go-utils/signature"
 )
 
-type Config struct {
-	Log *slog.Logger
+type NewProxy struct {
+	NewProxyConstantConfig
 
-	UsersListenAddr   string
-	NetworkListenAddr string
-	CertListenAddr    string
-	BuilderEndpoint   string
+	ConfigHub *BuilderConfigHub
 
+	OrderflowSigner *signature.Signer
+	PublicCertPEM   []byte
+	Certificate     tls.Certificate
+
+	localBuilder rpcclient.RPCClient
+
+	PublicHandler http.Handler
+	LocalHandler  http.Handler
+	CertHandler   http.Handler // this endpoint just returns generated certificate
+
+	updatePeers chan []ConfighubBuilder
+	shareQueue  chan *ParsedRequest
+
+	archiveQueue      chan *ParsedRequest
+	archiveFlushQueue chan struct{}
+
+	peersMu          sync.RWMutex
+	lastFetchedPeers []ConfighubBuilder
+}
+
+type NewProxyConstantConfig struct {
+	Log                    *slog.Logger
+	Name                   string
+	FlashbotsSignerAddress common.Address
+}
+
+type NewProxyConfig struct {
+	NewProxyConstantConfig
 	CertValidDuration time.Duration
 	CertHosts         []string
 
-	BuilderConfigHub BuilderConfigHub
+	BuilderConfigHubEndpoint string
+	ArchiveEndpoint          string
+	LocalBuilderEndpoint     string
+
+	// EthRPC should support eth_blockNumber API
+	EthRPC string
 }
 
-type Proxy struct {
-	Config Config
-
-	log                *slog.Logger
-	orderflowSignerKey *ecdsa.PrivateKey
-
-	publicCertPEM []byte
-	certificate   *tls.Certificate
-}
-
-func New(config Config) (*Proxy, error) {
-	return &Proxy{
-		Config:      config,
-		log:         config.Log,
-		certificate: nil,
-	}, nil
-}
-
-func (prx *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/cert" {
-		w.Header().Add("Content-Type", "application/octet-stream")
-		w.Write(prx.publicCertPEM) //nolint: errcheck
-		return
-	}
-
-	metrics.IncRequestsReceived()
-	body, err := io.ReadAll(r.Body)
+func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
+	orderflowSigner, err := signature.NewRandomSigner()
 	if err != nil {
-		prx.log.Error("Failed to read request body", "err", err)
-		return
+		return nil, err
 	}
-	client := &http.Client{
-		Timeout: 1 * time.Second,
-	}
-
-	req, err := http.NewRequest(http.MethodPost, prx.Config.BuilderEndpoint, bytes.NewBuffer(body))
+	cert, key, err := GenerateCert(config.CertValidDuration, config.CertHosts)
 	if err != nil {
-		prx.log.Error("Failed to create a req to the local builder", "err", err)
-		return
+		return nil, err
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		prx.log.Error("Failed to make a req to the local builder", "err", err)
-		return
-	}
-	defer resp.Body.Close()
-	prx.log.Info("Request proxied")
-	w.WriteHeader(http.StatusOK)
-}
-
-func (prx *Proxy) GenerateAndPublish() error {
-	cert, key, err := GenerateCert(prx.Config.CertValidDuration, prx.Config.CertHosts)
-	if err != nil {
-		return err
-	}
-	prx.publicCertPEM = cert
-
-	orderflowSignerKey, err := crypto.GenerateKey()
-	if err != nil {
-		return err
-	}
-	prx.orderflowSignerKey = orderflowSignerKey
-	orderflowSigner := crypto.PubkeyToAddress(orderflowSignerKey.PublicKey)
-
-	prx.log.Info("Generated ordeflow signer", "address", orderflowSigner)
-
-	//selfInfo := ConfighubOrderflowProxyCredentials{
-	//	TLSCert:            string(cert),
-	//	EcdsaPubkeyAddress: orderflowSigner,
-	//}
-
-	//err = prx.Config.BuilderConfigHub.RegisterCredentials(selfInfo)
-	//if err != nil {
-	//	return err
-	//}
 
 	certificate, err := tls.X509KeyPair(cert, key)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	prx.certificate = &certificate
-	return nil
+
+	localBuilder := rpcclient.NewClient(config.LocalBuilderEndpoint)
+
+	prx := &NewProxy{
+		NewProxyConstantConfig: config.NewProxyConstantConfig,
+		ConfigHub:              NewBuilderConfigHub(config.BuilderConfigHubEndpoint),
+		OrderflowSigner:        orderflowSigner,
+		PublicCertPEM:          cert,
+		Certificate:            certificate,
+		localBuilder:           localBuilder,
+	}
+
+	publicHandler, err := prx.PublicJSONRPCHandler()
+	if err != nil {
+		return nil, err
+	}
+	prx.PublicHandler = publicHandler
+
+	localHandler, err := prx.LocalJSONRPCHandler()
+	if err != nil {
+		return nil, err
+	}
+	prx.LocalHandler = localHandler
+
+	prx.CertHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/octet-stream")
+		_, err := w.Write([]byte(prx.PublicCertPEM))
+		prx.Log.Warn("Failed to serve certificate", slog.Any("error", err))
+	})
+
+	shareQeueuCh := make(chan *ParsedRequest)
+	updatePeersCh := make(chan []ConfighubBuilder)
+	prx.shareQueue = shareQeueuCh
+	prx.updatePeers = updatePeersCh
+	queue := ShareQueue{
+		name:         prx.Name,
+		log:          prx.Log,
+		queue:        shareQeueuCh,
+		updatePeers:  updatePeersCh,
+		localBuilder: prx.localBuilder,
+		singer:       prx.OrderflowSigner,
+	}
+	go queue.Run()
+
+	archiveQueueCh := make(chan *ParsedRequest)
+	archiveFlushCh := make(chan struct{})
+	prx.archiveQueue = archiveQueueCh
+	prx.archiveFlushQueue = archiveFlushCh
+	archiveClient := rpcclient.NewClientWithOpts(config.ArchiveEndpoint, &rpcclient.RPCClientOpts{
+		Signer: orderflowSigner,
+	})
+	archiveQueue := ArchiveQueue{
+		log:               prx.Log,
+		queue:             archiveQueueCh,
+		flushQueue:        archiveFlushCh,
+		archiveClient:     archiveClient,
+		blockNumberSource: NewBlockNumberSource(config.EthRPC),
+	}
+	go archiveQueue.Run()
+
+	return prx, nil
 }
 
-func (prx *Proxy) StartServersInBackground() error {
-	// user server
-	srvUsers := &http.Server{
-		Addr:    prx.Config.UsersListenAddr,
-		Handler: prx,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{*prx.certificate},
-			MinVersion:   tls.VersionTLS13,
-		},
-		ReadHeaderTimeout: 2 * time.Second,
-	}
-	go func() {
-		prx.log.Info("Starting orderflow users input", "addr", srvUsers.Addr)
-		if err := srvUsers.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			prx.log.Error("Orderflow proxy users input  failed", "err", err)
-		}
-	}()
+func (prx *NewProxy) Stop() {
+	close(prx.shareQueue)
+	close(prx.updatePeers)
+	close(prx.archiveQueue)
+	close(prx.archiveFlushQueue)
+}
 
-	// network server
-	srvNetwork := &http.Server{
-		Addr:    prx.Config.NetworkListenAddr,
-		Handler: prx,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{*prx.certificate},
-			MinVersion:   tls.VersionTLS13,
-		},
-		ReadHeaderTimeout: 2 * time.Second,
+func (prx *NewProxy) TLSConfig() *tls.Config {
+	return &tls.Config{
+		Certificates: []tls.Certificate{prx.Certificate},
+		MinVersion:   tls.VersionTLS13,
 	}
-	go func() {
-		prx.log.Info("Starting orderflow network input", "addr", srvNetwork.Addr)
-		if err := srvNetwork.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			prx.log.Error("Orderflow proxy network input failed", "err", err)
-		}
-	}()
+}
 
-	// cert server
-	srvCert := &http.Server{
-		Addr:              prx.Config.CertListenAddr,
-		Handler:           prx,
-		ReadHeaderTimeout: 2 * time.Second,
+func (prx *NewProxy) RegisterSecrets() error {
+	return prx.ConfigHub.RegisterCredentials(ConfighubOrderflowProxyCredentials{
+		TLSCert:            string(prx.PublicCertPEM),
+		EcdsaPubkeyAddress: prx.OrderflowSigner.Address(),
+	})
+}
+
+// RequestNewPeers updates currently available peers from the builder config hub
+func (prx *NewProxy) RequestNewPeers() error {
+	builders, err := prx.ConfigHub.Builders()
+	if err != nil {
+		return err
 	}
-	go func() {
-		prx.log.Info("Starting cert server", "addr", srvCert.Addr)
-		if err := srvCert.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			prx.log.Error("Orderflow proxy cert serving failed", "err", err)
-		}
-	}()
 
+	prx.peersMu.Lock()
+	prx.lastFetchedPeers = builders
+	prx.peersMu.Unlock()
+
+	select {
+	case prx.updatePeers <- builders:
+	default:
+	}
 	return nil
 }

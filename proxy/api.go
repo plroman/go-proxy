@@ -1,5 +1,7 @@
 package proxy
 
+// TODO: deduplicate requests
+
 import (
 	"context"
 	"errors"
@@ -20,7 +22,12 @@ const (
 	BidSubsidiseBlockMethod     = "bid_subsidiseBlock"
 )
 
-var errUnknownPeer = errors.New("unknown peers can't send to the public address")
+var (
+	errUnknownPeer = errors.New("unknown peers can't send to the public address")
+
+	errSubsidyWrongEndpoint = errors.New("subsidy can only be called on public method")
+	errSubsidyWrongCaller   = errors.New("subsidy can only be called by Flashbots")
+)
 
 func (prx *NewProxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
@@ -76,7 +83,6 @@ func (prx *NewProxy) IsValidPublicSigner(address common.Address) bool {
 }
 
 func (prx *NewProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
-	// TODO: validate args
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -84,6 +90,10 @@ func (prx *NewProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.E
 		}
 	} else {
 		ethSendBundle.SigningAddress = &signer
+	}
+	err := ValidateEthSendBundle(&ethSendBundle, publicEndpoint)
+	if err != nil {
+		return err
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
@@ -103,7 +113,7 @@ func (prx *NewProxy) EthSendBundleLocal(ctx context.Context, ethSendBundle rpcty
 }
 
 func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
-	// TODO: validate args, handle cancellations
+	// TODO: make sure that cancellations are handled
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -111,6 +121,10 @@ func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.M
 		}
 	} else {
 		mevSendBundle.Metadata.Signer = &signer
+	}
+	err := ValidateMevSendBundle(&mevSendBundle, publicEndpoint)
+	if err != nil {
+		return err
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
@@ -130,7 +144,6 @@ func (prx *NewProxy) MevSendBundleLocal(ctx context.Context, mevSendBundle rpcty
 }
 
 func (prx *NewProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
-	// TODO: validate args
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -138,6 +151,10 @@ func (prx *NewProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctyp
 		}
 	} else {
 		ethCancelBundle.SigningAddress = &signer
+	}
+	err := ValidateEthCancelBundle(&ethCancelBundle, publicEndpoint)
+	if err != nil {
+		return err
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint:  publicEndpoint,
@@ -157,7 +174,6 @@ func (prx *NewProxy) EthCancelBundleLocal(ctx context.Context, ethCancelBundle r
 }
 
 func (prx *NewProxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs, publicEndpoint bool) error {
-	// TODO: convert to mev send bundle when sharing
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if !prx.IsValidPublicSigner(signer) {
@@ -185,8 +201,10 @@ func (prx *NewProxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rp
 	signer := rpcserver.GetSigner(ctx)
 	if publicEndpoint {
 		if signer != prx.FlashbotsSignerAddress {
-			return errUnknownPeer
+			return errSubsidyWrongCaller
 		}
+	} else {
+		return errSubsidyWrongEndpoint
 	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint:    publicEndpoint,
