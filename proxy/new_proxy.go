@@ -30,6 +30,9 @@ type NewProxy struct {
 	updatePeers chan []ConfighubBuilder
 	shareQueue  chan *ParsedRequest
 
+	archiveQueue      chan *ParsedRequest
+	archiveFlushQueue chan struct{}
+
 	peersMu          sync.RWMutex
 	lastFetchedPeers []ConfighubBuilder
 }
@@ -46,8 +49,8 @@ type NewProxyConfig struct {
 	CertHosts         []string
 
 	BuilderConfigHubEndpoint string
-
-	LocalBuilderEndpoint string
+	ArchiveEndpoint          string
+	LocalBuilderEndpoint     string
 }
 
 func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
@@ -108,7 +111,29 @@ func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
 	}
 	go queue.Run()
 
+	archiveQueueCh := make(chan *ParsedRequest)
+	archiveFlushCh := make(chan struct{})
+	prx.archiveQueue = archiveQueueCh
+	prx.archiveFlushQueue = archiveFlushCh
+	archiveClient := rpcclient.NewClientWithOpts(config.ArchiveEndpoint, &rpcclient.RPCClientOpts{
+		Signer: orderflowSigner,
+	})
+	archiveQueue := ArchiveQueue{
+		log:           prx.Log,
+		queue:         archiveQueueCh,
+		flushQueue:    archiveFlushCh,
+		archiveClient: archiveClient,
+	}
+	go archiveQueue.Run()
+
 	return prx, nil
+}
+
+func (prx *NewProxy) Stop() {
+	close(prx.shareQueue)
+	close(prx.updatePeers)
+	close(prx.archiveQueue)
+	close(prx.archiveFlushQueue)
 }
 
 func (prx *NewProxy) TLSConfig() *tls.Config {

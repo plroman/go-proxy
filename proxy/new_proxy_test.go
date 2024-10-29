@@ -63,6 +63,7 @@ func (setup *OrderflowProxyTestSetup) Close() {
 	_ = setup.localServer.Close()
 	setup.certServer.Close()
 	setup.localBuilderServer.Close()
+	setup.proxy.Stop()
 }
 
 func StartTestOrderflowProxy(name string) (*OrderflowProxyTestSetup, error) {

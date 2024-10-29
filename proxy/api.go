@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flashbots/go-utils/rpcserver"
@@ -88,6 +89,7 @@ func (prx *NewProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.E
 		publicEndpoint: publicEndpoint,
 		signer:         signer,
 		ethSendBundle:  &ethSendBundle,
+		method:         EthSendBundleMethod,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
@@ -114,6 +116,7 @@ func (prx *NewProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.M
 		publicEndpoint: publicEndpoint,
 		signer:         signer,
 		mevSendBundle:  &mevSendBundle,
+		method:         MevSendBundleMethod,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
@@ -140,6 +143,7 @@ func (prx *NewProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctyp
 		publicEndpoint:  publicEndpoint,
 		signer:          signer,
 		ethCancelBundle: &ethCancelBundle,
+		method:          EthCancelBundleMethod,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
@@ -164,6 +168,7 @@ func (prx *NewProxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransa
 		publicEndpoint:        publicEndpoint,
 		signer:                signer,
 		ethSendRawTransaction: &ethSendRawTransaction,
+		method:                EthSendRawTransactionMethod,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
@@ -187,6 +192,7 @@ func (prx *NewProxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rp
 		publicEndpoint:    publicEndpoint,
 		signer:            signer,
 		bidSubsidiseBlock: &bidSubsidiseBlock,
+		method:            BidSubsidiseBlockMethod,
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
@@ -202,6 +208,8 @@ func (prx *NewProxy) BidSubsidiseBlockLocal(ctx context.Context, bidSubsidiseBlo
 type ParsedRequest struct {
 	publicEndpoint        bool
 	signer                common.Address
+	method                string
+	receivedAt            time.Time
 	ethSendBundle         *rpctypes.EthSendBundleArgs
 	mevSendBundle         *rpctypes.MevSendBundleArgs
 	ethCancelBundle       *rpctypes.EthCancelBundleArgs
@@ -210,12 +218,16 @@ type ParsedRequest struct {
 }
 
 func (prx *NewProxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
-	// share with others
+	parsedRequest.receivedAt = time.Now()
 	select {
 	case <-ctx.Done():
 	case prx.shareQueue <- &parsedRequest:
 	}
-	// TODO: archive queue
-	// prx.archiveQueue <- &parsedRequest
+	if !parsedRequest.publicEndpoint {
+		select {
+		case <-ctx.Done():
+		case prx.archiveQueue <- &parsedRequest:
+		}
+	}
 	return nil
 }
