@@ -11,9 +11,13 @@
 make build
 ```
 
-## Run
+There are two separate programs in this repo:
+* receiver proxy that should be part of tdx image
+* sender proxy that is part of infra that sends orderflow to all peers
 
-Orderflow proxy will: 
+## Run receiver proxy
+
+Receiver proxy will: 
 
 * generate SSL certificate
 * generate orderflow signer
@@ -24,15 +28,15 @@ Orderflow proxy will:
 * proxy local request to other builders in the network
 * archive local requests by sending them to archive endpoint
 
-Flags for the orderflow proxy
+Flags for the receiver proxy
 
 ```
-./build/orderflow-proxy -h 
+./build/receiver-proxy -h
 NAME:
-   orderflow-proxy - Serve API, and metrics
+   receiver-proxy - Serve API, and metrics
 
 USAGE:
-   orderflow-proxy [global options] command [command options] 
+   receiver-proxy [global options] command [command options] 
 
 COMMANDS:
    help, h  Shows a list of commands or help for one command
@@ -54,7 +58,62 @@ GLOBAL OPTIONS:
    --log-json                                  log in JSON format (default: false)
    --log-debug                                 log debug messages (default: false)
    --log-uid                                   generate a uuid and add to all log messages (default: false)
-   --log-service value                         add 'service' tag to logs (default: "your-project")
+   --log-service value                         add 'service' tag to logs (default: "tdx-orderflow-proxy-receiver")
    --pprof                                     enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false)
    --help, -h                                  show help
+```
+
+
+## Run sender proxy
+
+Sender proxy will: 
+* listen for http requests
+* sign request with `orderflow-signer-key`
+* poxy them to the peers received form builder config hub
+
+```
+./build/sender-proxy -h
+NAME:
+   sender-proxy - Serve API, and metrics
+
+USAGE:
+   sender-proxy [global options] command [command options] 
+
+COMMANDS:
+   help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --listen-address value               address to listen on for requests (default: "127.0.0.1:8080")
+   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892")
+   --orderflow-signer-key value         ordreflow will be signed with this address (default: "0xfb5ad18432422a84514f71d63b45edf51165d33bef9c2bd60957a48d4c4cb68e")
+   --max-request-body-size-bytes value  Maximum size of the request body, if 0 default will be used (default: 0)
+   --metrics-addr value                 address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090")
+   --log-json                           log in JSON format (default: false)
+   --log-debug                          log debug messages (default: false)
+   --log-uid                            generate a uuid and add to all log messages (default: false)
+   --log-service value                  add 'service' tag to logs (default: "tdx-orderflow-proxy-sender")
+   --pprof                              enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false)
+   --help, -h                           show help
+dvush@ripper> ./build/sender-proxy -h                                                                ~/flashbots/orderflow-proxy
+NAME:
+   sender-proxy - Serve API, and metrics
+
+USAGE:
+   sender-proxy [global options] command [command options] 
+
+COMMANDS:
+   help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --listen-address value               address to listen on for requests (default: "127.0.0.1:8080")
+   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892")
+   --orderflow-signer-key value         ordreflow will be signed with this address (default: "0xfb5ad18432422a84514f71d63b45edf51165d33bef9c2bd60957a48d4c4cb68e")
+   --max-request-body-size-bytes value  Maximum size of the request body, if 0 default will be used (default: 0)
+   --metrics-addr value                 address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090")
+   --log-json                           log in JSON format (default: false)
+   --log-debug                          log debug messages (default: false)
+   --log-uid                            generate a uuid and add to all log messages (default: false)
+   --log-service value                  add 'service' tag to logs (default: "tdx-orderflow-proxy-sender")
+   --pprof                              enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false)
+   --help, -h                           show help
 ```

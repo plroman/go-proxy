@@ -105,7 +105,7 @@ var flags []cli.Flag = []cli.Flag{
 	},
 	&cli.StringFlag{
 		Name:  "log-service",
-		Value: "your-project",
+		Value: "tdx-orderflow-proxy-receiver",
 		Usage: "add 'service' tag to logs",
 	},
 	&cli.BoolFlag{
@@ -117,7 +117,7 @@ var flags []cli.Flag = []cli.Flag{
 
 func main() {
 	app := &cli.App{
-		Name:  "orderflow-proxy",
+		Name:  "receiver-proxy",
 		Usage: "Serve API, and metrics",
 		Flags: flags,
 		Action: func(cCtx *cli.Context) error {
@@ -180,25 +180,25 @@ func main() {
 			flashbotsSignerAddress := eth.HexToAddress(flashbotsSignerStr)
 			maxRequestBodySizeBytes := cCtx.Int64("max-request-body-size-bytes")
 
-			proxyConfig := &proxy.NewProxyConfig{
-				NewProxyConstantConfig:   proxy.NewProxyConstantConfig{Log: log, Name: name, FlashbotsSignerAddress: flashbotsSignerAddress},
-				CertValidDuration:        certDuration,
-				CertHosts:                certHosts,
-				BuilderConfigHubEndpoint: builderConfigHubEndpoint,
-				ArchiveEndpoint:          archiveEndpoint,
-				LocalBuilderEndpoint:     builderEndpoint,
-				EthRPC:                   rpcEndpoint,
-				MaxRequestBodySizeBytes:  maxRequestBodySizeBytes,
+			proxyConfig := &proxy.ReceiverProxyConfig{
+				ReceiverProxyConstantConfig: proxy.ReceiverProxyConstantConfig{Log: log, Name: name, FlashbotsSignerAddress: flashbotsSignerAddress},
+				CertValidDuration:           certDuration,
+				CertHosts:                   certHosts,
+				BuilderConfigHubEndpoint:    builderConfigHubEndpoint,
+				ArchiveEndpoint:             archiveEndpoint,
+				LocalBuilderEndpoint:        builderEndpoint,
+				EthRPC:                      rpcEndpoint,
+				MaxRequestBodySizeBytes:     maxRequestBodySizeBytes,
 			}
 
-			instance, err := proxy.NewNewProxy(*proxyConfig)
+			instance, err := proxy.NewReceiverProxy(*proxyConfig)
 			if err != nil {
-				log.Error("failed to create proxy server", "err", err)
+				log.Error("Failed to create proxy server", "err", err)
 				return err
 			}
 			err = instance.RegisterSecrets()
 			if err != nil {
-				log.Error("failed to generate and publish secrets", "err", err)
+				log.Error("Failed to generate and publish secrets", "err", err)
 				return err
 			}
 
@@ -206,11 +206,13 @@ func main() {
 			publicListenAddr := cCtx.String("public-listen-addr")
 			certListenAddr := cCtx.String("cert-listen-addr")
 
-			servers, err := proxy.StartServers(instance, publicListenAddr, localListenAddr, certListenAddr)
+			servers, err := proxy.StartReceiverServers(instance, publicListenAddr, localListenAddr, certListenAddr)
 			if err != nil {
-				log.Error("failed to start proxy server", "err", err)
+				log.Error("Failed to start proxy server", "err", err)
 				return err
 			}
+
+			log.Info("Started receiver proxy", "publicListenAddress", publicListenAddr, "localListenAddress", localListenAddr, "certListenAddress", certListenAddr)
 
 			<-exit
 			servers.Stop()

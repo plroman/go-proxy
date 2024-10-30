@@ -23,7 +23,8 @@ clean: ## Clean the build directory
 .PHONY: build
 build: ## Build the HTTP server
 	@mkdir -p ./build
-	go build -trimpath -ldflags "-X github.com/flashbots/tdx-orderflow-proxy/common.Version=${VERSION}" -v -o ./build/orderflow-proxy cmd/httpserver/main.go
+	go build -trimpath -ldflags "-X github.com/flashbots/tdx-orderflow-proxy/common.Version=${VERSION}" -v -o ./build/sender-proxy cmd/sender-proxy/main.go
+	go build -trimpath -ldflags "-X github.com/flashbots/tdx-orderflow-proxy/common.Version=${VERSION}" -v -o ./build/receiver-proxy cmd/receiver-proxy/main.go
 
 ##@ Test & Development
 
@@ -75,6 +76,13 @@ docker: ## Build the HTTP server Docker image
 	DOCKER_BUILDKIT=1 docker build \
 		--platform linux/amd64 \
 		--build-arg VERSION=${VERSION} \
-		--file httpserver.dockerfile \
-		--tag your-project \
+		--file sender.dockerfile \
+		--tag tdx-orderflow-proxy-sender-proxy \
+	.
+
+	DOCKER_BUILDKIT=1 docker build \
+		--platform linux/amd64 \
+		--build-arg VERSION=${VERSION} \
+		--file receiver.dockerfile \
+		--tag tdx-orderflow-proxy-receiver-proxy \
 	.

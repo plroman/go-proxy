@@ -22,7 +22,7 @@ type ShareQueue struct {
 	queue        chan *ParsedRequest
 	updatePeers  chan []ConfighubBuilder
 	localBuilder rpcclient.RPCClient
-	singer       *signature.Signer
+	signer       *signature.Signer
 }
 
 type shareQueuePeer struct {
@@ -54,11 +54,15 @@ func (p *shareQueuePeer) SendRequest(log *slog.Logger, request *ParsedRequest) {
 
 func (sq *ShareQueue) Run() {
 	var (
-		localBuilder = newShareQueuePeer("local-builder", sq.localBuilder)
+		localBuilder *shareQueuePeer
 		peers        []shareQueuePeer
 	)
-	defer localBuilder.Close()
-	go sq.proxyRequests(&localBuilder)
+	if sq.localBuilder != nil {
+		builderPeer := newShareQueuePeer("local-builder", sq.localBuilder)
+		localBuilder = &builderPeer
+		go sq.proxyRequests(localBuilder)
+		defer localBuilder.Close()
+	}
 	for {
 		select {
 		case req, more := <-sq.queue:
@@ -66,7 +70,9 @@ func (sq *ShareQueue) Run() {
 			if !more {
 				return
 			}
-			localBuilder.SendRequest(sq.log, req)
+			if localBuilder != nil {
+				localBuilder.SendRequest(sq.log, req)
+			}
 			if !req.publicEndpoint {
 				for _, peer := range peers {
 					peer.SendRequest(sq.log, req)
@@ -85,7 +91,7 @@ func (sq *ShareQueue) Run() {
 				if info.Name == sq.name {
 					continue
 				}
-				client, err := RPCClientWithCertAndSigner(OrderflowProxyURLFromIP(info.IP), []byte(info.OrderflowProxy.TLSCert), sq.singer)
+				client, err := RPCClientWithCertAndSigner(OrderflowProxyURLFromIP(info.IP), []byte(info.OrderflowProxy.TLSCert), sq.signer)
 				if err != nil {
 					sq.log.Error("Failed to create a peer client", slog.Any("error", err))
 					shareQueueInternalErrors.Inc()

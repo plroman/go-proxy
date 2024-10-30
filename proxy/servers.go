@@ -12,14 +12,14 @@ var (
 	HTTPDefaultWriteTimeout = 30 * time.Second
 )
 
-type OrderflowProxyServers struct {
-	proxy        *Proxy
+type ReceiverProxyServers struct {
+	proxy        *ReceiverProxy
 	publicServer *http.Server
 	localServer  *http.Server
 	certServer   *http.Server
 }
 
-func StartServers(proxy *Proxy, publicListenAddress, localListenAddress, certListenAddress string) (*OrderflowProxyServers, error) {
+func StartReceiverServers(proxy *ReceiverProxy, publicListenAddress, localListenAddress, certListenAddress string) (*ReceiverProxyServers, error) {
 	publicServer := &http.Server{
 		Addr:         publicListenAddress,
 		Handler:      proxy.PublicHandler,
@@ -78,7 +78,7 @@ func StartServers(proxy *Proxy, publicListenAddress, localListenAddress, certLis
 		}
 	}()
 
-	return &OrderflowProxyServers{
+	return &ReceiverProxyServers{
 		proxy:        proxy,
 		publicServer: publicServer,
 		localServer:  localServer,
@@ -86,9 +86,58 @@ func StartServers(proxy *Proxy, publicListenAddress, localListenAddress, certLis
 	}, nil
 }
 
-func (s *OrderflowProxyServers) Stop() {
+func (s *ReceiverProxyServers) Stop() {
 	_ = s.publicServer.Close()
 	_ = s.localServer.Close()
 	_ = s.certServer.Close()
+	s.proxy.Stop()
+}
+
+type SenderProxyServers struct {
+	proxy  *SenderProxy
+	server *http.Server
+}
+
+func StartSenderServers(proxy *SenderProxy, listenAddress string) (*SenderProxyServers, error) {
+	server := &http.Server{
+		Addr:         listenAddress,
+		Handler:      proxy.Handler,
+		ReadTimeout:  HTTPDefaultReadTimeout,
+		WriteTimeout: HTTPDefaultWriteTimeout,
+	}
+
+	errCh := make(chan error)
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			err = errors.Join(errors.New("HTTP server failed"), err)
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return nil, err
+	case <-time.After(time.Millisecond * 100):
+	}
+
+	go func() {
+		for {
+			err, more := <-errCh
+			if !more {
+				return
+			}
+			proxy.Log.Error("Error in HTTP server", slog.Any("error", err))
+		}
+	}()
+
+	return &SenderProxyServers{
+		proxy:  proxy,
+		server: server,
+	}, nil
+}
+
+func (s *SenderProxyServers) Stop() {
+	_ = s.server.Close()
 	s.proxy.Stop()
 }

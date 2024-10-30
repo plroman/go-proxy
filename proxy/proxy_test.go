@@ -45,7 +45,7 @@ func ServeHTTPRequestToChan(channel chan *RequestData) *httptest.Server {
 }
 
 type OrderflowProxyTestSetup struct {
-	proxy        *Proxy
+	proxy        *ReceiverProxy
 	publicServer *http.Server
 	localServer  *http.Server
 	certServer   *httptest.Server
@@ -170,10 +170,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func createProxy(localBuilder, name string) *Proxy {
+func createProxy(localBuilder, name string) *ReceiverProxy {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	proxy, err := NewNewProxy(NewProxyConfig{
-		NewProxyConstantConfig: NewProxyConstantConfig{
+	proxy, err := NewReceiverProxy(ReceiverProxyConfig{
+		ReceiverProxyConstantConfig: ReceiverProxyConstantConfig{
 			Log:  log,
 			Name: name,
 		},

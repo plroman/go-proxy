@@ -21,8 +21,8 @@ var (
 	peerUpdateTime = time.Minute * 5
 )
 
-type Proxy struct {
-	NewProxyConstantConfig
+type ReceiverProxy struct {
+	ReceiverProxyConstantConfig
 
 	ConfigHub *BuilderConfigHub
 
@@ -50,14 +50,14 @@ type Proxy struct {
 	peerUpdaterClose chan struct{}
 }
 
-type NewProxyConstantConfig struct {
+type ReceiverProxyConstantConfig struct {
 	Log                    *slog.Logger
 	Name                   string
 	FlashbotsSignerAddress common.Address
 }
 
-type NewProxyConfig struct {
-	NewProxyConstantConfig
+type ReceiverProxyConfig struct {
+	ReceiverProxyConstantConfig
 	CertValidDuration time.Duration
 	CertHosts         []string
 
@@ -71,7 +71,7 @@ type NewProxyConfig struct {
 	MaxRequestBodySizeBytes int64
 }
 
-func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
+func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 	orderflowSigner, err := signature.NewRandomSigner()
 	if err != nil {
 		return nil, err
@@ -88,14 +88,14 @@ func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 
 	localBuilder := rpcclient.NewClient(config.LocalBuilderEndpoint)
 
-	prx := &Proxy{
-		NewProxyConstantConfig: config.NewProxyConstantConfig,
-		ConfigHub:              NewBuilderConfigHub(config.Log, config.BuilderConfigHubEndpoint),
-		OrderflowSigner:        orderflowSigner,
-		PublicCertPEM:          cert,
-		Certificate:            certificate,
-		localBuilder:           localBuilder,
-		requestUniqueKeysRLU:   expirable.NewLRU[uuid.UUID, struct{}](requestsRLUSize, nil, requestsRLUTTL),
+	prx := &ReceiverProxy{
+		ReceiverProxyConstantConfig: config.ReceiverProxyConstantConfig,
+		ConfigHub:                   NewBuilderConfigHub(config.Log, config.BuilderConfigHubEndpoint),
+		OrderflowSigner:             orderflowSigner,
+		PublicCertPEM:               cert,
+		Certificate:                 certificate,
+		localBuilder:                localBuilder,
+		requestUniqueKeysRLU:        expirable.NewLRU[uuid.UUID, struct{}](requestsRLUSize, nil, requestsRLUTTL),
 	}
 	maxRequestBodySizeBytes := DefaultMaxRequestBodySizeBytes
 	if config.MaxRequestBodySizeBytes != 0 {
@@ -132,7 +132,7 @@ func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 		queue:        shareQeueuCh,
 		updatePeers:  updatePeersCh,
 		localBuilder: prx.localBuilder,
-		singer:       prx.OrderflowSigner,
+		signer:       prx.OrderflowSigner,
 	}
 	go queue.Run()
 
@@ -172,7 +172,7 @@ func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 	return prx, nil
 }
 
-func (prx *Proxy) Stop() {
+func (prx *ReceiverProxy) Stop() {
 	close(prx.shareQueue)
 	close(prx.updatePeers)
 	close(prx.archiveQueue)
@@ -180,14 +180,14 @@ func (prx *Proxy) Stop() {
 	close(prx.peerUpdaterClose)
 }
 
-func (prx *Proxy) TLSConfig() *tls.Config {
+func (prx *ReceiverProxy) TLSConfig() *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{prx.Certificate},
 		MinVersion:   tls.VersionTLS13,
 	}
 }
 
-func (prx *Proxy) RegisterSecrets() error {
+func (prx *ReceiverProxy) RegisterSecrets() error {
 	const maxRetries = 10
 	const timeBetweenRetries = time.Second * 10
 
@@ -212,7 +212,7 @@ func (prx *Proxy) RegisterSecrets() error {
 }
 
 // RequestNewPeers updates currently available peers from the builder config hub
-func (prx *Proxy) RequestNewPeers() error {
+func (prx *ReceiverProxy) RequestNewPeers() error {
 	builders, err := prx.ConfigHub.Builders()
 	if err != nil {
 		return err
@@ -230,6 +230,6 @@ func (prx *Proxy) RequestNewPeers() error {
 }
 
 // FlushArchiveQueue forces the archive queue to flush
-func (prx *Proxy) FlushArchiveQueue() {
+func (prx *ReceiverProxy) FlushArchiveQueue() {
 	prx.archiveFlushQueue <- struct{}{}
 }

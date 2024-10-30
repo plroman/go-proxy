@@ -32,7 +32,7 @@ var (
 	apiNow = time.Now
 )
 
-func (prx *Proxy) PublicJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver.JSONRPCHandler, error) {
+func (prx *ReceiverProxy) PublicJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
 		EthSendBundleMethod:         prx.EthSendBundlePublic,
 		MevSendBundleMethod:         prx.MevSendBundlePublic,
@@ -51,7 +51,7 @@ func (prx *Proxy) PublicJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserve
 	return handler, err
 }
 
-func (prx *Proxy) LocalJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver.JSONRPCHandler, error) {
+func (prx *ReceiverProxy) LocalJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
 		EthSendBundleMethod:         prx.EthSendBundleLocal,
 		MevSendBundleMethod:         prx.MevSendBundleLocal,
@@ -70,7 +70,7 @@ func (prx *Proxy) LocalJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver
 	return handler, err
 }
 
-func (prx *Proxy) ValidateSigner(ctx context.Context, req *ParsedRequest, publicEndpoint bool) error {
+func (prx *ReceiverProxy) ValidateSigner(ctx context.Context, req *ParsedRequest, publicEndpoint bool) error {
 	req.signer = rpcserver.GetSigner(ctx)
 	if !publicEndpoint {
 		return nil
@@ -99,7 +99,7 @@ func (prx *Proxy) ValidateSigner(ctx context.Context, req *ParsedRequest, public
 	return nil
 }
 
-func (prx *Proxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
+func (prx *ReceiverProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
 		ethSendBundle:  &ethSendBundle,
@@ -126,15 +126,15 @@ func (prx *Proxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthS
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
-func (prx *Proxy) EthSendBundlePublic(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
+func (prx *ReceiverProxy) EthSendBundlePublic(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
 	return prx.EthSendBundle(ctx, ethSendBundle, true)
 }
 
-func (prx *Proxy) EthSendBundleLocal(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
+func (prx *ReceiverProxy) EthSendBundleLocal(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
 	return prx.EthSendBundle(ctx, ethSendBundle, false)
 }
 
-func (prx *Proxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
+func (prx *ReceiverProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
 	parsedRequest := ParsedRequest{
 		publicEndpoint: publicEndpoint,
 		mevSendBundle:  &mevSendBundle,
@@ -164,15 +164,15 @@ func (prx *Proxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevS
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
-func (prx *Proxy) MevSendBundlePublic(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
+func (prx *ReceiverProxy) MevSendBundlePublic(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
 	return prx.MevSendBundle(ctx, mevSendBundle, true)
 }
 
-func (prx *Proxy) MevSendBundleLocal(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
+func (prx *ReceiverProxy) MevSendBundleLocal(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
 	return prx.MevSendBundle(ctx, mevSendBundle, false)
 }
 
-func (prx *Proxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
+func (prx *ReceiverProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
 	parsedRequest := ParsedRequest{
 		publicEndpoint:  publicEndpoint,
 		ethCancelBundle: &ethCancelBundle,
@@ -195,15 +195,15 @@ func (prx *Proxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
-func (prx *Proxy) EthCancelBundlePublic(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
+func (prx *ReceiverProxy) EthCancelBundlePublic(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
 	return prx.EthCancelBundle(ctx, ethCancelBundle, true)
 }
 
-func (prx *Proxy) EthCancelBundleLocal(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
+func (prx *ReceiverProxy) EthCancelBundleLocal(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
 	return prx.EthCancelBundle(ctx, ethCancelBundle, false)
 }
 
-func (prx *Proxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs, publicEndpoint bool) error {
+func (prx *ReceiverProxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs, publicEndpoint bool) error {
 	parsedRequest := ParsedRequest{
 		publicEndpoint:        publicEndpoint,
 		ethSendRawTransaction: &ethSendRawTransaction,
@@ -220,15 +220,15 @@ func (prx *Proxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransacti
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
-func (prx *Proxy) EthSendRawTransactionPublic(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
+func (prx *ReceiverProxy) EthSendRawTransactionPublic(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
 	return prx.EthSendRawTransaction(ctx, ethSendRawTransaction, true)
 }
 
-func (prx *Proxy) EthSendRawTransactionLocal(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
+func (prx *ReceiverProxy) EthSendRawTransactionLocal(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
 	return prx.EthSendRawTransaction(ctx, ethSendRawTransaction, false)
 }
 
-func (prx *Proxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs, publicEndpoint bool) error {
+func (prx *ReceiverProxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs, publicEndpoint bool) error {
 	if !publicEndpoint {
 		return errSubsidyWrongEndpoint
 	}
@@ -254,11 +254,11 @@ func (prx *Proxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rpcty
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
-func (prx *Proxy) BidSubsidiseBlockPublic(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
+func (prx *ReceiverProxy) BidSubsidiseBlockPublic(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
 	return prx.BidSubsidiseBlock(ctx, bidSubsidiseBlock, true)
 }
 
-func (prx *Proxy) BidSubsidiseBlockLocal(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
+func (prx *ReceiverProxy) BidSubsidiseBlockLocal(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
 	return prx.BidSubsidiseBlock(ctx, bidSubsidiseBlock, false)
 }
 
@@ -276,7 +276,7 @@ type ParsedRequest struct {
 	bidSubsidiseBlock     *rpctypes.BidSubsisideBlockArgs
 }
 
-func (prx *Proxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
+func (prx *ReceiverProxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
 	parsedRequest.receivedAt = apiNow()
 	prx.Log.Info("Received request", slog.Bool("isPublicEndpoint", parsedRequest.publicEndpoint), slog.String("method", parsedRequest.method))
 	if parsedRequest.publicEndpoint {
