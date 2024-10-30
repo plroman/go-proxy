@@ -10,11 +10,18 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flashbots/go-utils/rpcclient"
 	"github.com/flashbots/go-utils/signature"
+	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 // TODO: update go-utils
 // TODO: rename timestamp to timestamp_millis
 // TODO: request new peers on cooldown
+
+var (
+	requestsRLUSize = 4096
+	requestsRLUTTL  = time.Second * 12
+)
 
 type Proxy struct {
 	NewProxyConstantConfig
@@ -39,6 +46,8 @@ type Proxy struct {
 
 	peersMu          sync.RWMutex
 	lastFetchedPeers []ConfighubBuilder
+
+	requestUniqueKeysRLU *expirable.LRU[uuid.UUID, struct{}]
 }
 
 type NewProxyConstantConfig struct {
@@ -84,6 +93,7 @@ func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 		PublicCertPEM:          cert,
 		Certificate:            certificate,
 		localBuilder:           localBuilder,
+		requestUniqueKeysRLU:   expirable.NewLRU[uuid.UUID, struct{}](requestsRLUSize, nil, requestsRLUTTL),
 	}
 
 	publicHandler, err := prx.PublicJSONRPCHandler()

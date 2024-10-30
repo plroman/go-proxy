@@ -1,6 +1,5 @@
 package proxy
 
-// TODO: deduplicate requests
 // TODO: use network server and user server namings
 
 import (
@@ -12,9 +11,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flashbots/go-utils/rpcserver"
 	"github.com/flashbots/go-utils/rpctypes"
+	"github.com/google/uuid"
 )
 
-const maxRequestBodySizeBytes = 30 * 1024 * 1024 // 30 MB, @configurable
+const maxRequestBodySizeBytes = 30 * 1024 * 1024 // 30 MB, TODO: configurable
 
 const (
 	FlashbotsPeerName = "flashbots"
@@ -72,48 +72,59 @@ func (prx *Proxy) LocalJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 	return handler, err
 }
 
-// IsValidPublicSigner verifies if signer is a valid peer and returns peer name
-func (prx *Proxy) IsValidPublicSigner(address common.Address) (bool, string) {
-	if address == prx.FlashbotsSignerAddress {
-		return true, FlashbotsPeerName
+func (prx *Proxy) ValidateSigner(ctx context.Context, req *ParsedRequest, publicEndpoint bool) error {
+	req.signer = rpcserver.GetSigner(ctx)
+	if !publicEndpoint {
+		return nil
 	}
+
+	if req.signer == prx.FlashbotsSignerAddress {
+		req.peerName = FlashbotsPeerName
+		return nil
+	}
+
 	prx.peersMu.RLock()
 	found := false
 	peerName := ""
 	for _, peer := range prx.lastFetchedPeers {
-		if address == peer.OrderflowProxy.EcdsaPubkeyAddress {
+		if req.signer == peer.OrderflowProxy.EcdsaPubkeyAddress {
 			found = true
 			peerName = peer.Name
 			break
 		}
 	}
+	if !found {
+		return errUnknownPeer
+	}
 	prx.peersMu.RUnlock()
-	return found, peerName
+	req.peerName = peerName
+	return nil
 }
 
 func (prx *Proxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
-	err := ValidateEthSendBundle(&ethSendBundle, publicEndpoint)
+	parsedRequest := ParsedRequest{
+		publicEndpoint: publicEndpoint,
+		ethSendBundle:  &ethSendBundle,
+		method:         EthSendBundleMethod,
+	}
+
+	err := prx.ValidateSigner(ctx, &parsedRequest, publicEndpoint)
 	if err != nil {
 		return err
 	}
-	signer := rpcserver.GetSigner(ctx)
-	var peerName string
-	if publicEndpoint {
-		ok, name := prx.IsValidPublicSigner(signer)
-		if !ok {
-			return errUnknownPeer
-		}
-		peerName = name
-	} else {
-		ethSendBundle.SigningAddress = &signer
+
+	err = ValidateEthSendBundle(&ethSendBundle, publicEndpoint)
+	if err != nil {
+		return err
 	}
-	parsedRequest := ParsedRequest{
-		publicEndpoint: publicEndpoint,
-		signer:         signer,
-		ethSendBundle:  &ethSendBundle,
-		method:         EthSendBundleMethod,
-		peerName:       peerName,
+
+	if !publicEndpoint {
+		ethSendBundle.SigningAddress = &parsedRequest.signer
 	}
+
+	uniqueKey := ethSendBundle.UniqueKey()
+	parsedRequest.requestArgUniqueKey = &uniqueKey
+
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
@@ -126,31 +137,32 @@ func (prx *Proxy) EthSendBundleLocal(ctx context.Context, ethSendBundle rpctypes
 }
 
 func (prx *Proxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
-	// TODO: make sure that cancellations are handled by the builder properly
-	err := ValidateMevSendBundle(&mevSendBundle, publicEndpoint)
+	parsedRequest := ParsedRequest{
+		publicEndpoint: publicEndpoint,
+		mevSendBundle:  &mevSendBundle,
+		method:         MevSendBundleMethod,
+	}
+
+	err := prx.ValidateSigner(ctx, &parsedRequest, publicEndpoint)
 	if err != nil {
 		return err
 	}
-	signer := rpcserver.GetSigner(ctx)
-	var peerName string
-	if publicEndpoint {
-		ok, name := prx.IsValidPublicSigner(signer)
-		if !ok {
-			return errUnknownPeer
-		}
-		peerName = name
-	} else {
+
+	// TODO: make sure that cancellations are handled by the builder properly
+	err = ValidateMevSendBundle(&mevSendBundle, publicEndpoint)
+	if err != nil {
+		return err
+	}
+
+	if !publicEndpoint {
 		mevSendBundle.Metadata = &rpctypes.MevBundleMetadata{
-			Signer: &signer,
+			Signer: &parsedRequest.signer,
 		}
 	}
-	parsedRequest := ParsedRequest{
-		publicEndpoint: publicEndpoint,
-		signer:         signer,
-		mevSendBundle:  &mevSendBundle,
-		method:         MevSendBundleMethod,
-		peerName:       peerName,
-	}
+
+	uniqueKey := mevSendBundle.UniqueKey()
+	parsedRequest.requestArgUniqueKey = &uniqueKey
+
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
@@ -163,27 +175,24 @@ func (prx *Proxy) MevSendBundleLocal(ctx context.Context, mevSendBundle rpctypes
 }
 
 func (prx *Proxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs, publicEndpoint bool) error {
-	err := ValidateEthCancelBundle(&ethCancelBundle, publicEndpoint)
+	parsedRequest := ParsedRequest{
+		publicEndpoint:  publicEndpoint,
+		ethCancelBundle: &ethCancelBundle,
+		method:          EthCancelBundleMethod,
+	}
+
+	err := prx.ValidateSigner(ctx, &parsedRequest, publicEndpoint)
 	if err != nil {
 		return err
 	}
-	signer := rpcserver.GetSigner(ctx)
-	var peerName string
-	if publicEndpoint {
-		ok, name := prx.IsValidPublicSigner(signer)
-		if !ok {
-			return errUnknownPeer
-		}
-		peerName = name
-	} else {
-		ethCancelBundle.SigningAddress = &signer
+
+	err = ValidateEthCancelBundle(&ethCancelBundle, publicEndpoint)
+	if err != nil {
+		return err
 	}
-	parsedRequest := ParsedRequest{
-		publicEndpoint:  publicEndpoint,
-		signer:          signer,
-		ethCancelBundle: &ethCancelBundle,
-		method:          EthCancelBundleMethod,
-		peerName:        peerName,
+
+	if !publicEndpoint {
+		ethCancelBundle.SigningAddress = &parsedRequest.signer
 	}
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
@@ -197,22 +206,19 @@ func (prx *Proxy) EthCancelBundleLocal(ctx context.Context, ethCancelBundle rpct
 }
 
 func (prx *Proxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs, publicEndpoint bool) error {
-	signer := rpcserver.GetSigner(ctx)
-	var peerName string
-	if publicEndpoint {
-		ok, name := prx.IsValidPublicSigner(signer)
-		if !ok {
-			return errUnknownPeer
-		}
-		peerName = name
-	}
 	parsedRequest := ParsedRequest{
 		publicEndpoint:        publicEndpoint,
-		signer:                signer,
 		ethSendRawTransaction: &ethSendRawTransaction,
 		method:                EthSendRawTransactionMethod,
-		peerName:              peerName,
 	}
+	err := prx.ValidateSigner(ctx, &parsedRequest, publicEndpoint)
+	if err != nil {
+		return err
+	}
+
+	uniqueKey := ethSendRawTransaction.UniqueKey()
+	parsedRequest.requestArgUniqueKey = &uniqueKey
+
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
@@ -225,20 +231,28 @@ func (prx *Proxy) EthSendRawTransactionLocal(ctx context.Context, ethSendRawTran
 }
 
 func (prx *Proxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs, publicEndpoint bool) error {
-	signer := rpcserver.GetSigner(ctx)
-	if publicEndpoint {
-		if signer != prx.FlashbotsSignerAddress {
-			return errSubsidyWrongCaller
-		}
-	} else {
+	if !publicEndpoint {
 		return errSubsidyWrongEndpoint
 	}
+
 	parsedRequest := ParsedRequest{
 		publicEndpoint:    publicEndpoint,
-		signer:            signer,
 		bidSubsidiseBlock: &bidSubsidiseBlock,
 		method:            BidSubsidiseBlockMethod,
 	}
+
+	err := prx.ValidateSigner(ctx, &parsedRequest, publicEndpoint)
+	if err != nil {
+		return err
+	}
+
+	if parsedRequest.signer != prx.FlashbotsSignerAddress {
+		return errSubsidyWrongCaller
+	}
+
+	uniqueKey := bidSubsidiseBlock.UniqueKey()
+	parsedRequest.requestArgUniqueKey = &uniqueKey
+
 	return prx.HandleParsedRequest(ctx, parsedRequest)
 }
 
@@ -256,6 +270,7 @@ type ParsedRequest struct {
 	method                string
 	peerName              string
 	receivedAt            time.Time
+	requestArgUniqueKey   *uuid.UUID
 	ethSendBundle         *rpctypes.EthSendBundleArgs
 	mevSendBundle         *rpctypes.MevSendBundleArgs
 	ethCancelBundle       *rpctypes.EthCancelBundleArgs
@@ -268,6 +283,13 @@ func (prx *Proxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedR
 	prx.Log.Info("Received request", slog.Bool("isNetworkEndpoint", parsedRequest.publicEndpoint), slog.String("method", parsedRequest.method))
 	if parsedRequest.publicEndpoint {
 		incAPIIncomingRequestsByPeer(parsedRequest.peerName)
+	}
+	if parsedRequest.requestArgUniqueKey != nil {
+		if prx.requestUniqueKeysRLU.Contains(*parsedRequest.requestArgUniqueKey) {
+			incAPIDuplicateRequestsByPeer(parsedRequest.peerName)
+			return nil
+		}
+		prx.requestUniqueKeysRLU.Add(*parsedRequest.requestArgUniqueKey, struct{}{})
 	}
 	select {
 	case <-ctx.Done():

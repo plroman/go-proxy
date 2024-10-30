@@ -20,7 +20,8 @@ var (
 )
 
 const (
-	apiIncomingRequestsByPeer = `orderflow_proxy_api_incoming_requests_by_peer{peer="%s"}`
+	apiIncomingRequestsByPeer  = `orderflow_proxy_api_incoming_requests_by_peer{peer="%s"}`
+	apiDuplicateRequestsByPeer = `orderflow_proxy_api_duplicate_requests_by_peer{peer="%s"}`
 
 	shareQueuePeerTotalRequestsLabel  = `orderflow_proxy_share_queue_peer_total_requests{peer="%s"}`
 	shareQueuePeerStallingErrorsLabel = `orderflow_proxy_share_queue_peer_stalling_errors{peer="%s"}`
@@ -30,6 +31,11 @@ const (
 
 func incAPIIncomingRequestsByPeer(peer string) {
 	l := fmt.Sprintf(apiIncomingRequestsByPeer, peer)
+	metrics.GetOrCreateCounter(l).Inc()
+}
+
+func incAPIDuplicateRequestsByPeer(peer string) {
+	l := fmt.Sprintf(apiDuplicateRequestsByPeer, peer)
 	metrics.GetOrCreateCounter(l).Inc()
 }
 

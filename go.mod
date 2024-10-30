@@ -7,6 +7,7 @@ require (
 	github.com/ethereum/go-ethereum v1.14.10
 	github.com/flashbots/go-utils v0.8.1-0.20241030090203-a80f2582c629
 	github.com/google/uuid v1.6.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.2
 )

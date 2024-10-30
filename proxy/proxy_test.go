@@ -285,10 +285,11 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	proxiesUpdatePeers(t)
 
 	_, err = client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
-		BlockNumber: 1000,
+		BlockNumber: 1001,
 	})
 	require.NoError(t, err)
 
+	expectedRequest = `{"method":"eth_sendBundle","params":[{"txs":null,"blockNumber":"0x3e9","signingAddress":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf"}],"id":0,"jsonrpc":"2.0"}`
 	builderRequest = expectRequest(t, proxies[0].localBuilderRequests)
 	require.Equal(t, expectedRequest, builderRequest.body)
 	builderRequest = expectRequest(t, proxies[1].localBuilderRequests)
@@ -303,10 +304,11 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	proxiesUpdatePeers(t)
 
 	_, err = client.Call(context.Background(), EthSendBundleMethod, &rpctypes.EthSendBundleArgs{
-		BlockNumber: 1000,
+		BlockNumber: 1002,
 	})
 	require.NoError(t, err)
 
+	expectedRequest = `{"method":"eth_sendBundle","params":[{"txs":null,"blockNumber":"0x3ea","signingAddress":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf"}],"id":0,"jsonrpc":"2.0"}`
 	builderRequest = expectRequest(t, proxies[0].localBuilderRequests)
 	require.Equal(t, expectedRequest, builderRequest.body)
 	builderRequest = expectRequest(t, proxies[1].localBuilderRequests)
