@@ -14,8 +14,6 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-// TODO: update go-utils
-
 var (
 	requestsRLUSize = 4096
 	requestsRLUTTL  = time.Second * 12
