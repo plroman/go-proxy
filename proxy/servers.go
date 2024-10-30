@@ -13,22 +13,22 @@ var (
 )
 
 type OrderflowProxyServers struct {
-	proxy         *Proxy
-	networkServer *http.Server
-	userServer    *http.Server
-	certServer    *http.Server
+	proxy        *Proxy
+	publicServer *http.Server
+	localServer  *http.Server
+	certServer   *http.Server
 }
 
-func StartServers(proxy *Proxy, networkListenAddress, userListenAddress, certListenAddress string) (*OrderflowProxyServers, error) {
-	networkServer := &http.Server{
-		Addr:         networkListenAddress,
+func StartServers(proxy *Proxy, publicListenAddress, localListenAddress, certListenAddress string) (*OrderflowProxyServers, error) {
+	publicServer := &http.Server{
+		Addr:         publicListenAddress,
 		Handler:      proxy.PublicHandler,
 		TLSConfig:    proxy.TLSConfig(),
 		ReadTimeout:  HTTPDefaultReadTimeout,
 		WriteTimeout: HTTPDefaultWriteTimeout,
 	}
-	userServer := &http.Server{
-		Addr:         userListenAddress,
+	localServer := &http.Server{
+		Addr:         localListenAddress,
 		Handler:      proxy.LocalHandler,
 		TLSConfig:    proxy.TLSConfig(),
 		ReadTimeout:  HTTPDefaultReadTimeout,
@@ -44,14 +44,14 @@ func StartServers(proxy *Proxy, networkListenAddress, userListenAddress, certLis
 	errCh := make(chan error)
 
 	go func() {
-		if err := networkServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			err = errors.Join(errors.New("network HTTP server failed"), err)
+		if err := publicServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			err = errors.Join(errors.New("public HTTP server failed"), err)
 			errCh <- err
 		}
 	}()
 	go func() {
-		if err := userServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			err = errors.Join(errors.New("user HTTP server failed"), err)
+		if err := localServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			err = errors.Join(errors.New("local HTTP server failed"), err)
 			errCh <- err
 		}
 	}()
@@ -79,16 +79,16 @@ func StartServers(proxy *Proxy, networkListenAddress, userListenAddress, certLis
 	}()
 
 	return &OrderflowProxyServers{
-		proxy:         proxy,
-		networkServer: networkServer,
-		userServer:    userServer,
-		certServer:    certServer,
+		proxy:        proxy,
+		publicServer: publicServer,
+		localServer:  localServer,
+		certServer:   certServer,
 	}, nil
 }
 
 func (s *OrderflowProxyServers) Stop() {
-	_ = s.networkServer.Close()
-	_ = s.userServer.Close()
+	_ = s.publicServer.Close()
+	_ = s.localServer.Close()
 	_ = s.certServer.Close()
 	s.proxy.Stop()
 }

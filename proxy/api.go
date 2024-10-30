@@ -1,7 +1,5 @@
 package proxy
 
-// TODO: use network server and user server namings
-
 import (
 	"context"
 	"errors"
@@ -43,7 +41,7 @@ func (prx *Proxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 		BidSubsidiseBlockMethod:     prx.BidSubsidiseBlockPublic,
 	},
 		rpcserver.JSONRPCHandlerOpts{
-			ServerName:                       "network_server",
+			ServerName:                       "public_server",
 			Log:                              prx.Log,
 			MaxRequestBodySizeBytes:          maxRequestBodySizeBytes,
 			VerifyRequestSignatureFromHeader: true,
@@ -62,7 +60,7 @@ func (prx *Proxy) LocalJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 		BidSubsidiseBlockMethod:     prx.BidSubsidiseBlockLocal,
 	},
 		rpcserver.JSONRPCHandlerOpts{
-			ServerName:                       "user_server",
+			ServerName:                       "local_server",
 			Log:                              prx.Log,
 			MaxRequestBodySizeBytes:          maxRequestBodySizeBytes,
 			VerifyRequestSignatureFromHeader: true,
@@ -280,7 +278,7 @@ type ParsedRequest struct {
 
 func (prx *Proxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
 	parsedRequest.receivedAt = apiNow()
-	prx.Log.Info("Received request", slog.Bool("isNetworkEndpoint", parsedRequest.publicEndpoint), slog.String("method", parsedRequest.method))
+	prx.Log.Info("Received request", slog.Bool("isPublicEndpoint", parsedRequest.publicEndpoint), slog.String("method", parsedRequest.method))
 	if parsedRequest.publicEndpoint {
 		incAPIIncomingRequestsByPeer(parsedRequest.peerName)
 	}

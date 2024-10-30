@@ -17,12 +17,12 @@ Orderflow proxy will:
 
 * generate SSL certificate
 * generate orderflow signer
-* create 2 input servers serving TLS with that certificate (user-listen-addr, network-listen-addr)
+* create 2 input servers serving TLS with that certificate (local-listen-addr, public-listen-addr)
 * create 1 local http server serving /cert  (cert-listen-addr)
 * create metrics server (metrict-addr)
-* proxy requests to local builder (from user and network/users listen addresses to the builder-endpoint)
-* proxy user request to other builders in the network
-* archive user requests by sending them to archive endpoint
+* proxy requests to local builder
+* proxy local request to other builders in the network
+* archive local requests by sending them to archive endpoint
 
 Flags for the orderflow proxy
 
@@ -38,8 +38,8 @@ COMMANDS:
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --users-listen-addr value                   address to listen on for orderflow proxy API for external users and local operator (default: "127.0.0.1:443")
-   --network-listen-addr value                 address to listen on for orderflow proxy API for other network participants (default: "127.0.0.1:5544")
+   --local-listen-address value                address to listen on for orderflow proxy API for external users and local operator (default: "127.0.0.1:443")
+   --public-listen-addr value                  address to listen on for orderflow proxy API for other network participants (default: "127.0.0.1:5544")
    --cert-listen-addr value                    address to listen on for orderflow proxy serving its SSL certificate on /cert (default: "127.0.0.1:14727")
    --builder-endpoint value                    address to send local ordeflow to (default: "http://127.0.0.1:8645")
    --rpc-endpoint value                        address of the node RPC that supports eth_blockNumber (default: "http://127.0.0.1:8545")

@@ -20,12 +20,12 @@ import (
 var flags []cli.Flag = []cli.Flag{
 	// input and output
 	&cli.StringFlag{
-		Name:  "users-listen-addr",
+		Name:  "local-listen-address",
 		Value: "127.0.0.1:443",
 		Usage: "address to listen on for orderflow proxy API for external users and local operator",
 	},
 	&cli.StringFlag{
-		Name:  "network-listen-addr",
+		Name:  "public-listen-addr",
 		Value: "127.0.0.1:5544",
 		Usage: "address to listen on for orderflow proxy API for other network participants",
 	},
@@ -199,11 +199,11 @@ func main() {
 				return err
 			}
 
-			usersListenAddr := cCtx.String("users-listen-addr")
-			networkListenAddr := cCtx.String("network-listen-addr")
+			localListenAddr := cCtx.String("local-listen-address")
+			publicListenAddr := cCtx.String("public-listen-addr")
 			certListenAddr := cCtx.String("cert-listen-addr")
 
-			servers, err := proxy.StartServers(instance, networkListenAddr, usersListenAddr, certListenAddr)
+			servers, err := proxy.StartServers(instance, publicListenAddr, localListenAddr, certListenAddr)
 			if err != nil {
 				log.Error("failed to start proxy server", "err", err)
 				return err
