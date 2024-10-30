@@ -124,8 +124,8 @@ type ArchiveEvent struct {
 }
 
 type ArchiveEventMetadata struct {
-	// Timestamp is a unix millisecond receivedAt
-	Timestamp int64 `json:"receivedAt"`
+	// ReceivedAt is a unix millisecond timestamp
+	ReceivedAt int64 `json:"receivedAt"`
 }
 
 type ArchiveEventEthSendBundle struct {
@@ -149,7 +149,7 @@ func (aq *ArchiveQueue) flush(batch []*ParsedRequest) {
 	for _, request := range batch {
 		event := ArchiveEvent{}
 		metadata := ArchiveEventMetadata{
-			Timestamp: request.receivedAt.UnixMilli(),
+			ReceivedAt: request.receivedAt.UnixMilli(),
 		}
 		if request.ethSendBundle != nil {
 			event.EthSendBundle = &ArchiveEventEthSendBundle{

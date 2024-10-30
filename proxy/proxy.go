@@ -15,7 +15,6 @@ import (
 )
 
 // TODO: update go-utils
-// TODO: rename timestamp to timestamp_millis
 
 var (
 	requestsRLUSize = 4096
