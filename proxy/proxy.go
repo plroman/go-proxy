@@ -16,11 +16,12 @@ import (
 
 // TODO: update go-utils
 // TODO: rename timestamp to timestamp_millis
-// TODO: request new peers on cooldown
 
 var (
 	requestsRLUSize = 4096
 	requestsRLUTTL  = time.Second * 12
+
+	peerUpdateTime = time.Minute * 5
 )
 
 type Proxy struct {
@@ -48,6 +49,8 @@ type Proxy struct {
 	lastFetchedPeers []ConfighubBuilder
 
 	requestUniqueKeysRLU *expirable.LRU[uuid.UUID, struct{}]
+
+	peerUpdaterClose chan struct{}
 }
 
 type NewProxyConstantConfig struct {
@@ -146,6 +149,23 @@ func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 	}
 	go archiveQueue.Run()
 
+	prx.peerUpdaterClose = make(chan struct{})
+	go func() {
+		for {
+			select {
+			case _, more := <-prx.peerUpdaterClose:
+				if !more {
+					return
+				}
+			case <-time.After(peerUpdateTime):
+				err := prx.RequestNewPeers()
+				if err != nil {
+					prx.Log.Error("Failed to update peers", slog.Any("error", err))
+				}
+			}
+		}
+	}()
+
 	return prx, nil
 }
 
@@ -154,6 +174,7 @@ func (prx *Proxy) Stop() {
 	close(prx.updatePeers)
 	close(prx.archiveQueue)
 	close(prx.archiveFlushQueue)
+	close(prx.peerUpdaterClose)
 }
 
 func (prx *Proxy) TLSConfig() *tls.Config {
