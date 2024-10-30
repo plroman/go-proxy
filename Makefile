@@ -72,11 +72,11 @@ cover-html: ## Run tests with coverage and open the HTML report
 	unlink /tmp/go-sim-lb.cover.tmp
 
 .PHONY: docker
-docker: ## Build the HTTP server Docker image
+docker:
 	DOCKER_BUILDKIT=1 docker build \
 		--platform linux/amd64 \
 		--build-arg VERSION=${VERSION} \
-		--file sender.dockerfile \
+		--file Dockerfile \
 		--tag tdx-orderflow-proxy-sender-proxy \
 	.
 

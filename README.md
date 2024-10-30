@@ -83,37 +83,15 @@ COMMANDS:
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --listen-address value               address to listen on for requests (default: "127.0.0.1:8080")
-   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892")
-   --orderflow-signer-key value         ordreflow will be signed with this address (default: "0xfb5ad18432422a84514f71d63b45edf51165d33bef9c2bd60957a48d4c4cb68e")
-   --max-request-body-size-bytes value  Maximum size of the request body, if 0 default will be used (default: 0)
-   --metrics-addr value                 address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090")
-   --log-json                           log in JSON format (default: false)
-   --log-debug                          log debug messages (default: false)
-   --log-uid                            generate a uuid and add to all log messages (default: false)
-   --log-service value                  add 'service' tag to logs (default: "tdx-orderflow-proxy-sender")
-   --pprof                              enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false)
-   --help, -h                           show help
-dvush@ripper> ./build/sender-proxy -h                                                                ~/flashbots/orderflow-proxy
-NAME:
-   sender-proxy - Serve API, and metrics
-
-USAGE:
-   sender-proxy [global options] command [command options] 
-
-COMMANDS:
-   help, h  Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --listen-address value               address to listen on for requests (default: "127.0.0.1:8080")
-   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892")
-   --orderflow-signer-key value         ordreflow will be signed with this address (default: "0xfb5ad18432422a84514f71d63b45edf51165d33bef9c2bd60957a48d4c4cb68e")
-   --max-request-body-size-bytes value  Maximum size of the request body, if 0 default will be used (default: 0)
-   --metrics-addr value                 address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090")
-   --log-json                           log in JSON format (default: false)
-   --log-debug                          log debug messages (default: false)
-   --log-uid                            generate a uuid and add to all log messages (default: false)
-   --log-service value                  add 'service' tag to logs (default: "tdx-orderflow-proxy-sender")
-   --pprof                              enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false)
+   --listen-address value               address to listen on for requests (default: "127.0.0.1:8080") [$LISTEN_ADDRESS]
+   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892") [$BUILDER_CONFIGHUB_ENDPOINT]
+   --orderflow-signer-key value         ordreflow will be signed with this address (default: "0xfb5ad18432422a84514f71d63b45edf51165d33bef9c2bd60957a48d4c4cb68e") [$ORDERFLOW_SIGNER_KEY]
+   --max-request-body-size-bytes value  Maximum size of the request body, if 0 default will be used (default: 0) [$MAX_REQUEST_BODY_SIZE_BYTES]
+   --metrics-addr value                 address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090") [$METRICS_ADDR]
+   --log-json                           log in JSON format (default: false) [$LOG_JSON]
+   --log-debug                          log debug messages (default: false) [$LOG_DEBUG]
+   --log-uid                            generate a uuid and add to all log messages (default: false) [$LOG_UID]
+   --log-service value                  add 'service' tag to logs (default: "tdx-orderflow-proxy-sender") [$LOG_SERVICE]
+   --pprof                              enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false) [$PPROF]
    --help, -h                           show help
 ```
