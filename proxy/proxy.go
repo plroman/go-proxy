@@ -188,11 +188,27 @@ func (prx *Proxy) TLSConfig() *tls.Config {
 }
 
 func (prx *Proxy) RegisterSecrets() error {
-	// TODO: add retries
-	return prx.ConfigHub.RegisterCredentials(ConfighubOrderflowProxyCredentials{
-		TLSCert:            string(prx.PublicCertPEM),
-		EcdsaPubkeyAddress: prx.OrderflowSigner.Address(),
-	})
+	const maxRetries = 10
+	const timeBetweenRetries = time.Second * 10
+
+	retry := 0
+	for {
+		err := prx.ConfigHub.RegisterCredentials(ConfighubOrderflowProxyCredentials{
+			TLSCert:            string(prx.PublicCertPEM),
+			EcdsaPubkeyAddress: prx.OrderflowSigner.Address(),
+		})
+		if err == nil {
+			prx.Log.Info("Credentials registered on config hub")
+			return nil
+		}
+
+		retry += 1
+		if retry >= maxRetries {
+			return err
+		}
+		prx.Log.Error("Fail to register credentials", slog.Any("error", err))
+		time.Sleep(timeBetweenRetries)
+	}
 }
 
 // RequestNewPeers updates currently available peers from the builder config hub
