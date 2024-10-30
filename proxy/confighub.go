@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -23,11 +24,13 @@ type ConfighubBuilder struct {
 }
 
 type BuilderConfigHub struct {
+	log      *slog.Logger
 	endpoint string
 }
 
-func NewBuilderConfigHub(endpoint string) *BuilderConfigHub {
+func NewBuilderConfigHub(log *slog.Logger, endpoint string) *BuilderConfigHub {
 	return &BuilderConfigHub{
+		log:      log,
 		endpoint: endpoint,
 	}
 }
@@ -49,21 +52,29 @@ func (b *BuilderConfigHub) RegisterCredentials(info ConfighubOrderflowProxyCrede
 	return nil
 }
 
-func (b *BuilderConfigHub) Builders() ([]ConfighubBuilder, error) {
-	resp, err := http.Get(b.endpoint + "/api/l1-builder/v1/builders")
+func (b *BuilderConfigHub) Builders() (result []ConfighubBuilder, err error) {
+	defer func() {
+		if err != nil {
+			confighubErrorsCounter.Inc()
+			b.log.Error("Failed to fetch peer list from config hub", slog.Any("error", err))
+		}
+	}()
+
+	var resp *http.Response
+	resp, err = http.Get(b.endpoint + "/api/l1-builder/v1/builders")
 	if err != nil {
-		return nil, err
+		return
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	var result []ConfighubBuilder
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return
 }

@@ -25,32 +25,51 @@ type ShareQueue struct {
 	singer       *signature.Signer
 }
 
+type shareQueuePeer struct {
+	ch     chan *ParsedRequest
+	name   string
+	client rpcclient.RPCClient
+}
+
+func newShareQueuePeer(name string, client rpcclient.RPCClient) shareQueuePeer {
+	return shareQueuePeer{
+		ch:     make(chan *ParsedRequest, jobBufferSize),
+		name:   name,
+		client: client,
+	}
+}
+
+func (p *shareQueuePeer) Close() {
+	close(p.ch)
+}
+
+func (p *shareQueuePeer) SendRequest(log *slog.Logger, request *ParsedRequest) {
+	select {
+	case p.ch <- request:
+	default:
+		log.Error("Peer is stalling on requests", slog.String("peer", p.name))
+		incShareQueuePeerStallingErrors(p.name)
+	}
+}
+
 func (sq *ShareQueue) Run() {
 	var (
-		localBuilder = make(chan *ParsedRequest)
-		peers        []chan *ParsedRequest
+		localBuilder = newShareQueuePeer("local-builder", sq.localBuilder)
+		peers        []shareQueuePeer
 	)
-	defer close(localBuilder)
-	go sq.proxyRequests(localBuilder, sq.localBuilder, "local-builder")
+	defer localBuilder.Close()
+	go sq.proxyRequests(&localBuilder)
 	for {
 		select {
 		case req, more := <-sq.queue:
-			sq.log.Debug("Received request", slog.String("name", sq.name), slog.String("method", req.method))
+			sq.log.Debug("Share queue received a request", slog.String("name", sq.name), slog.String("method", req.method))
 			if !more {
 				return
 			}
-			select {
-			case localBuilder <- req:
-			default:
-				// @log
-			}
+			localBuilder.SendRequest(sq.log, req)
 			if !req.publicEndpoint {
 				for _, peer := range peers {
-					select {
-					case peer <- req:
-					default:
-						// @log
-					}
+					peer.SendRequest(sq.log, req)
 				}
 			}
 		case newPeers, more := <-sq.updatePeers:
@@ -58,7 +77,7 @@ func (sq *ShareQueue) Run() {
 				return
 			}
 			for _, peer := range peers {
-				close(peer)
+				peer.Close()
 			}
 			peers = nil
 			for _, info := range newPeers {
@@ -69,21 +88,22 @@ func (sq *ShareQueue) Run() {
 				client, err := RPCClientWithCertAndSigner(OrderflowProxyURLFromIP(info.IP), []byte(info.OrderflowProxy.TLSCert), sq.singer)
 				if err != nil {
 					sq.log.Error("Failed to create a peer client", slog.Any("error", err))
+					shareQueueInternalErrors.Inc()
 					continue
 				}
 				sq.log.Info("Created client for peer", slog.String("peer", info.Name), slog.String("name", sq.name))
-				ch := make(chan *ParsedRequest, jobBufferSize)
-				peers = append(peers, ch)
-				go sq.proxyRequests(ch, client, info.Name)
+				newPeer := newShareQueuePeer(info.Name, client)
+				peers = append(peers, newPeer)
+				go sq.proxyRequests(&newPeer)
 			}
 		}
 	}
 }
 
-func (sq *ShareQueue) proxyRequests(ch chan *ParsedRequest, client rpcclient.RPCClient, name string) {
-	logger := sq.log.With(slog.String("target", name), slog.String("name", sq.name))
+func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer) {
+	logger := sq.log.With(slog.String("peer", peer.name), slog.String("name", sq.name))
 	for {
-		req, more := <-ch
+		req, more := <-peer.ch
 		if !more {
 			return
 		}
@@ -108,16 +128,22 @@ func (sq *ShareQueue) proxyRequests(ch chan *ParsedRequest, client rpcclient.RPC
 		} else if req.bidSubsidiseBlock != nil {
 			continue
 		} else {
-			logger.Error("Unknown request type", slog.String("name", sq.name))
+			logger.Error("Unknown request type", slog.String("method", req.method))
+			shareQueueInternalErrors.Inc()
 			continue
 		}
-		resp, err := client.Call(ctx, method, data)
+		start := time.Now()
+		resp, err := peer.client.Call(ctx, method, data)
+		timeShareQueuePeerRPCDuration(peer.name, int64(time.Since(start).Milliseconds()))
 		if err != nil {
 			logger.Warn("Error while proxying request", slog.Any("error", err))
+			incShareQueuePeerRPCErrors(peer.name)
 		}
 		if resp != nil && resp.Error != nil {
 			logger.Warn("Error returned form target while proxying", slog.Any("error", resp.Error))
+			incShareQueuePeerRPCErrors(peer.name)
 		}
+		incShareQueueTotalRequests(peer.name)
 		logger.Debug("Message proxied")
 	}
 }

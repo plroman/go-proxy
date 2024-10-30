@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/VictoriaMetrics/metrics v1.35.1
 	github.com/ethereum/go-ethereum v1.14.10
-	github.com/flashbots/go-utils v0.8.1-0.20241028112637-1fd3b1f002e9
+	github.com/flashbots/go-utils v0.8.1-0.20241030090203-a80f2582c629
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.2

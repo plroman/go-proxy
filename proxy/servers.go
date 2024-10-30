@@ -13,13 +13,13 @@ var (
 )
 
 type OrderflowProxyServers struct {
-	proxy         *NewProxy
+	proxy         *Proxy
 	networkServer *http.Server
 	userServer    *http.Server
 	certServer    *http.Server
 }
 
-func StartServers(proxy *NewProxy, networkListenAddress, userListenAddress, certListenAddress string) (*OrderflowProxyServers, error) {
+func StartServers(proxy *Proxy, networkListenAddress, userListenAddress, certListenAddress string) (*OrderflowProxyServers, error) {
 	networkServer := &http.Server{
 		Addr:         networkListenAddress,
 		Handler:      proxy.PublicHandler,

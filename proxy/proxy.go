@@ -12,7 +12,11 @@ import (
 	"github.com/flashbots/go-utils/signature"
 )
 
-type NewProxy struct {
+// TODO: update go-utils
+// TODO: rename timestamp to timestamp_millis
+// TODO: request new peers on cooldown
+
+type Proxy struct {
 	NewProxyConstantConfig
 
 	ConfigHub *BuilderConfigHub
@@ -56,7 +60,7 @@ type NewProxyConfig struct {
 	EthRPC string
 }
 
-func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
+func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 	orderflowSigner, err := signature.NewRandomSigner()
 	if err != nil {
 		return nil, err
@@ -73,9 +77,9 @@ func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
 
 	localBuilder := rpcclient.NewClient(config.LocalBuilderEndpoint)
 
-	prx := &NewProxy{
+	prx := &Proxy{
 		NewProxyConstantConfig: config.NewProxyConstantConfig,
-		ConfigHub:              NewBuilderConfigHub(config.BuilderConfigHubEndpoint),
+		ConfigHub:              NewBuilderConfigHub(config.Log, config.BuilderConfigHubEndpoint),
 		OrderflowSigner:        orderflowSigner,
 		PublicCertPEM:          cert,
 		Certificate:            certificate,
@@ -135,21 +139,22 @@ func NewNewProxy(config NewProxyConfig) (*NewProxy, error) {
 	return prx, nil
 }
 
-func (prx *NewProxy) Stop() {
+func (prx *Proxy) Stop() {
 	close(prx.shareQueue)
 	close(prx.updatePeers)
 	close(prx.archiveQueue)
 	close(prx.archiveFlushQueue)
 }
 
-func (prx *NewProxy) TLSConfig() *tls.Config {
+func (prx *Proxy) TLSConfig() *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{prx.Certificate},
 		MinVersion:   tls.VersionTLS13,
 	}
 }
 
-func (prx *NewProxy) RegisterSecrets() error {
+func (prx *Proxy) RegisterSecrets() error {
+	// TODO: add retries
 	return prx.ConfigHub.RegisterCredentials(ConfighubOrderflowProxyCredentials{
 		TLSCert:            string(prx.PublicCertPEM),
 		EcdsaPubkeyAddress: prx.OrderflowSigner.Address(),
@@ -157,7 +162,7 @@ func (prx *NewProxy) RegisterSecrets() error {
 }
 
 // RequestNewPeers updates currently available peers from the builder config hub
-func (prx *NewProxy) RequestNewPeers() error {
+func (prx *Proxy) RequestNewPeers() error {
 	builders, err := prx.ConfigHub.Builders()
 	if err != nil {
 		return err
@@ -175,6 +180,6 @@ func (prx *NewProxy) RequestNewPeers() error {
 }
 
 // FlushArchiveQueue forces the archive queue to flush
-func (prx *NewProxy) FlushArchiveQueue() {
+func (prx *Proxy) FlushArchiveQueue() {
 	prx.archiveFlushQueue <- struct{}{}
 }

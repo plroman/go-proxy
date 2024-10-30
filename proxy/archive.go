@@ -55,9 +55,11 @@ func (aq *ArchiveQueue) Run() {
 			if !more {
 				return
 			}
+			archiveEventsProcessedTotalCounter.Inc()
 			processedReq, err := aq.updateParsedRequest(req)
 			if err != nil {
 				aq.log.Error("Failed to prepare request for archive", slog.Any("error", err))
+				archiveEventsProcessedErrCounter.Inc()
 				continue
 			}
 			if processedReq == nil {
@@ -142,7 +144,6 @@ type ArchiveEventEthCancelBundle struct {
 }
 
 func (aq *ArchiveQueue) flush(batch []*ParsedRequest) {
-	// @metric
 	aq.log.Info("Sending batch to the archive", slog.Int("size", len(batch)))
 	args := FlashbotsNewOrderEventsArgs{}
 	for _, request := range batch {
@@ -167,6 +168,7 @@ func (aq *ArchiveQueue) flush(batch []*ParsedRequest) {
 			}
 		} else {
 			aq.log.Error("Incorrect request for orderflow archival", slog.String("method", request.method))
+			archiveEventsProcessedErrCounter.Inc()
 			continue
 		}
 		args.OrderEvents = append(args.OrderEvents, event)
@@ -174,11 +176,22 @@ func (aq *ArchiveQueue) flush(batch []*ParsedRequest) {
 	if len(args.OrderEvents) == 0 {
 		return
 	}
+	start := time.Now()
 	res, err := aq.archiveClient.Call(context.Background(), NewOrderEventsMethod, args)
+	archiveEventsRPCDuration.Update(float64(time.Since(start).Milliseconds()))
+
+	callFailed := false
 	if err != nil {
 		aq.log.Error("Error while making RPC request to archive", slog.Any("error", err))
+		archiveEventsRPCErrors.Inc()
+		callFailed = true
 	}
 	if res != nil && res.Error != nil {
 		aq.log.Error("Archive returned error", slog.Any("error", res.Error))
+		archiveEventsRPCErrors.Inc()
+		callFailed = true
+	}
+	if !callFailed {
+		archiveEventsRPCSentCounter.AddInt64(int64(len(args.OrderEvents)))
 	}
 }
