@@ -47,6 +47,7 @@ GLOBAL OPTIONS:
    --orderflow-archive-endpoint value          address of the ordreflow archive endpoint (block-processor) (default: "http://127.0.0.1:14893")
    --builder-name value                        name of this builder (same as in confighub) (default: "test-builder")
    --flashbots-orderflow-signer-address value  ordreflow from Flashbots will be signed with this address (default: "0x5015Fa72E34f75A9eC64f44a4Fcf0837919D1bB7")
+   --max-request-body-size-bytes value         Maximum size of the request body, if 0 default will be used (default: 0)
    --cert-duration value                       generated certificate duration (default: 8760h0m0s)
    --cert-hosts value [ --cert-hosts value ]   generated certificate hosts (default: "127.0.0.1", "localhost")
    --metrics-addr value                        address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090")

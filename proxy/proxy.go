@@ -67,6 +67,8 @@ type NewProxyConfig struct {
 
 	// EthRPC should support eth_blockNumber API
 	EthRPC string
+
+	MaxRequestBodySizeBytes int64
 }
 
 func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
@@ -95,14 +97,18 @@ func NewNewProxy(config NewProxyConfig) (*Proxy, error) {
 		localBuilder:           localBuilder,
 		requestUniqueKeysRLU:   expirable.NewLRU[uuid.UUID, struct{}](requestsRLUSize, nil, requestsRLUTTL),
 	}
+	maxRequestBodySizeBytes := DefaultMaxRequestBodySizeBytes
+	if config.MaxRequestBodySizeBytes != 0 {
+		maxRequestBodySizeBytes = config.MaxRequestBodySizeBytes
+	}
 
-	publicHandler, err := prx.PublicJSONRPCHandler()
+	publicHandler, err := prx.PublicJSONRPCHandler(maxRequestBodySizeBytes)
 	if err != nil {
 		return nil, err
 	}
 	prx.PublicHandler = publicHandler
 
-	localHandler, err := prx.LocalJSONRPCHandler()
+	localHandler, err := prx.LocalJSONRPCHandler(maxRequestBodySizeBytes)
 	if err != nil {
 		return nil, err
 	}

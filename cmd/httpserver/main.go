@@ -64,6 +64,11 @@ var flags []cli.Flag = []cli.Flag{
 		Value: "0x5015Fa72E34f75A9eC64f44a4Fcf0837919D1bB7",
 		Usage: "ordreflow from Flashbots will be signed with this address",
 	},
+	&cli.Int64Flag{
+		Name:  "max-request-body-size-bytes",
+		Value: 0,
+		Usage: "Maximum size of the request body, if 0 default will be used",
+	},
 
 	// certificate config
 	&cli.DurationFlag{
@@ -173,19 +178,17 @@ func main() {
 			name := cCtx.String("builder-name")
 			flashbotsSignerStr := cCtx.String("flashbots-orderflow-signer-address")
 			flashbotsSignerAddress := eth.HexToAddress(flashbotsSignerStr)
+			maxRequestBodySizeBytes := cCtx.Int64("max-request-body-size-bytes")
 
 			proxyConfig := &proxy.NewProxyConfig{
-				NewProxyConstantConfig: proxy.NewProxyConstantConfig{
-					Log:                    log,
-					Name:                   name,
-					FlashbotsSignerAddress: flashbotsSignerAddress,
-				},
+				NewProxyConstantConfig:   proxy.NewProxyConstantConfig{Log: log, Name: name, FlashbotsSignerAddress: flashbotsSignerAddress},
 				CertValidDuration:        certDuration,
 				CertHosts:                certHosts,
 				BuilderConfigHubEndpoint: builderConfigHubEndpoint,
 				ArchiveEndpoint:          archiveEndpoint,
 				LocalBuilderEndpoint:     builderEndpoint,
 				EthRPC:                   rpcEndpoint,
+				MaxRequestBodySizeBytes:  maxRequestBodySizeBytes,
 			}
 
 			instance, err := proxy.NewNewProxy(*proxyConfig)

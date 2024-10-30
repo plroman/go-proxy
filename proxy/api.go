@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxRequestBodySizeBytes = 30 * 1024 * 1024 // 30 MB, TODO: configurable
+const DefaultMaxRequestBodySizeBytes = int64(30 * 1024 * 1024) // 30 MB
 
 const (
 	FlashbotsPeerName = "flashbots"
@@ -32,7 +32,7 @@ var (
 	apiNow = time.Now
 )
 
-func (prx *Proxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
+func (prx *Proxy) PublicJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
 		EthSendBundleMethod:         prx.EthSendBundlePublic,
 		MevSendBundleMethod:         prx.MevSendBundlePublic,
@@ -51,7 +51,7 @@ func (prx *Proxy) PublicJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
 	return handler, err
 }
 
-func (prx *Proxy) LocalJSONRPCHandler() (*rpcserver.JSONRPCHandler, error) {
+func (prx *Proxy) LocalJSONRPCHandler(maxRequestBodySizeBytes int64) (*rpcserver.JSONRPCHandler, error) {
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
 		EthSendBundleMethod:         prx.EthSendBundleLocal,
 		MevSendBundleMethod:         prx.MevSendBundleLocal,
