@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"net/http/pprof"
@@ -20,7 +21,7 @@ import (
 var flags []cli.Flag = []cli.Flag{
 	// input and output
 	&cli.StringFlag{
-		Name:  "local-listen-address",
+		Name:  "local-listen-addr",
 		Value: "127.0.0.1:443",
 		Usage: "address to listen on for orderflow proxy API for external users and local operator",
 	},
@@ -53,11 +54,6 @@ var flags []cli.Flag = []cli.Flag{
 		Name:  "orderflow-archive-endpoint",
 		Value: "http://127.0.0.1:14893",
 		Usage: "address of the ordreflow archive endpoint (block-processor)",
-	},
-	&cli.StringFlag{
-		Name:  "builder-name",
-		Value: "test-builder",
-		Usage: "name of this builder (same as in confighub)",
 	},
 	&cli.StringFlag{
 		Name:  "flashbots-orderflow-signer-address",
@@ -175,13 +171,12 @@ func main() {
 			certHosts := cCtx.StringSlice("cert-hosts")
 			builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
 			archiveEndpoint := cCtx.String("orderflow-archive-endpoint")
-			name := cCtx.String("builder-name")
 			flashbotsSignerStr := cCtx.String("flashbots-orderflow-signer-address")
 			flashbotsSignerAddress := eth.HexToAddress(flashbotsSignerStr)
 			maxRequestBodySizeBytes := cCtx.Int64("max-request-body-size-bytes")
 
 			proxyConfig := &proxy.ReceiverProxyConfig{
-				ReceiverProxyConstantConfig: proxy.ReceiverProxyConstantConfig{Log: log, Name: name, FlashbotsSignerAddress: flashbotsSignerAddress},
+				ReceiverProxyConstantConfig: proxy.ReceiverProxyConstantConfig{Log: log, FlashbotsSignerAddress: flashbotsSignerAddress},
 				CertValidDuration:           certDuration,
 				CertHosts:                   certHosts,
 				BuilderConfigHubEndpoint:    builderConfigHubEndpoint,
@@ -196,13 +191,23 @@ func main() {
 				log.Error("Failed to create proxy server", "err", err)
 				return err
 			}
-			err = instance.RegisterSecrets()
+
+			registerContext, registerCancel := context.WithCancel(context.Background())
+			go func() {
+				select {
+				case <-exit:
+					registerCancel()
+				case <-registerContext.Done():
+				}
+			}()
+			err = instance.RegisterSecrets(registerContext)
+			registerCancel()
 			if err != nil {
 				log.Error("Failed to generate and publish secrets", "err", err)
 				return err
 			}
 
-			localListenAddr := cCtx.String("local-listen-address")
+			localListenAddr := cCtx.String("local-listen-addr")
 			publicListenAddr := cCtx.String("public-listen-addr")
 			certListenAddr := cCtx.String("cert-listen-addr")
 

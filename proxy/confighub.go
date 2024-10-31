@@ -3,6 +3,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,12 +36,18 @@ func NewBuilderConfigHub(log *slog.Logger, endpoint string) *BuilderConfigHub {
 	}
 }
 
-func (b *BuilderConfigHub) RegisterCredentials(info ConfighubOrderflowProxyCredentials) error {
+func (b *BuilderConfigHub) RegisterCredentials(ctx context.Context, info ConfighubOrderflowProxyCredentials) error {
 	body, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
-	resp, err := http.Post(b.endpoint+"/api/l1-builder/v1/register_credentials/orderflow-proxy", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, b.endpoint+"/api/l1-builder/v1/register_credentials/orderflow-proxy", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}

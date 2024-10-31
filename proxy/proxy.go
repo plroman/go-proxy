@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/tls"
 	"log/slog"
 	"net/http"
@@ -51,7 +52,8 @@ type ReceiverProxy struct {
 }
 
 type ReceiverProxyConstantConfig struct {
-	Log                    *slog.Logger
+	Log *slog.Logger
+	// Name is optional field and it used to distringuish multiple proxies when running in the same process in tests
 	Name                   string
 	FlashbotsSignerAddress common.Address
 }
@@ -187,13 +189,16 @@ func (prx *ReceiverProxy) TLSConfig() *tls.Config {
 	}
 }
 
-func (prx *ReceiverProxy) RegisterSecrets() error {
+func (prx *ReceiverProxy) RegisterSecrets(ctx context.Context) error {
 	const maxRetries = 10
 	const timeBetweenRetries = time.Second * 10
 
 	retry := 0
 	for {
-		err := prx.ConfigHub.RegisterCredentials(ConfighubOrderflowProxyCredentials{
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		err := prx.ConfigHub.RegisterCredentials(ctx, ConfighubOrderflowProxyCredentials{
 			TLSCert:            string(prx.PublicCertPEM),
 			EcdsaPubkeyAddress: prx.OrderflowSigner.Address(),
 		})
@@ -207,7 +212,11 @@ func (prx *ReceiverProxy) RegisterSecrets() error {
 			return err
 		}
 		prx.Log.Error("Fail to register credentials", slog.Any("error", err))
-		time.Sleep(timeBetweenRetries)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(timeBetweenRetries):
+		}
 	}
 }
 

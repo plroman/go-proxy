@@ -88,7 +88,7 @@ func (sq *ShareQueue) Run() {
 			peers = nil
 			for _, info := range newPeers {
 				// don't send to yourself
-				if info.Name == sq.name {
+				if info.OrderflowProxy.EcdsaPubkeyAddress == sq.signer.Address() {
 					continue
 				}
 				client, err := RPCClientWithCertAndSigner(OrderflowProxyURLFromIP(info.IP), []byte(info.OrderflowProxy.TLSCert), sq.signer)

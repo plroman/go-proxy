@@ -191,7 +191,7 @@ func createProxy(localBuilder, name string) *ReceiverProxy {
 }
 
 func TestPublishSecrets(t *testing.T) {
-	err := proxies[0].proxy.RegisterSecrets()
+	err := proxies[0].proxy.RegisterSecrets(context.Background())
 	require.NoError(t, err)
 }
 
@@ -262,7 +262,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 
 	// we start with no peers
 	builderHubPeers = nil
-	err = proxies[0].proxy.RegisterSecrets()
+	err = proxies[0].proxy.RegisterSecrets(context.Background())
 	require.NoError(t, err)
 	proxiesUpdatePeers(t)
 
@@ -280,7 +280,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	slog.Info("Adding first peer")
 
 	// add one more peer
-	err = proxies[1].proxy.RegisterSecrets()
+	err = proxies[1].proxy.RegisterSecrets(context.Background())
 	require.NoError(t, err)
 	proxiesUpdatePeers(t)
 
@@ -299,7 +299,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	// add another peer
 	slog.Info("Adding second peer")
 
-	err = proxies[2].proxy.RegisterSecrets()
+	err = proxies[2].proxy.RegisterSecrets(context.Background())
 	require.NoError(t, err)
 	proxiesUpdatePeers(t)
 
@@ -325,7 +325,7 @@ func TestProxySendToArchive(t *testing.T) {
 
 	// we start with no peers
 	builderHubPeers = nil
-	err = proxies[0].proxy.RegisterSecrets()
+	err = proxies[0].proxy.RegisterSecrets(context.Background())
 	require.NoError(t, err)
 	proxiesUpdatePeers(t)
 
