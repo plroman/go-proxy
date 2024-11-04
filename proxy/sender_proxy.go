@@ -82,10 +82,12 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 					return
 				}
 			case <-time.After(peerUpdateTime):
-				builders, err := prx.ConfigHub.Builders()
+				builders, err := prx.ConfigHub.Builders(true)
 				if err != nil {
 					prx.Log.Error("Failed to update peers", slog.Any("error", err))
 				}
+
+				prx.Log.Info("Updated peers", slog.Any("peers", builders))
 
 				select {
 				case prx.updatePeers <- builders:

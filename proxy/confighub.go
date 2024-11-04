@@ -59,7 +59,7 @@ func (b *BuilderConfigHub) RegisterCredentials(ctx context.Context, info Configh
 	return nil
 }
 
-func (b *BuilderConfigHub) Builders() (result []ConfighubBuilder, err error) {
+func (b *BuilderConfigHub) Builders(internal bool) (result []ConfighubBuilder, err error) {
 	defer func() {
 		if err != nil {
 			confighubErrorsCounter.Inc()
@@ -68,7 +68,13 @@ func (b *BuilderConfigHub) Builders() (result []ConfighubBuilder, err error) {
 	}()
 
 	var resp *http.Response
-	resp, err = http.Get(b.endpoint + "/api/l1-builder/v1/builders")
+	url := b.endpoint
+	if internal {
+		url += "/api/internal/l1-builder/v1/builders"
+	} else {
+		url += "/api/l1-builder/v1/builders"
+	}
+	resp, err = http.Get(url)
 	if err != nil {
 		return
 	}

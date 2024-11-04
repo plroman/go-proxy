@@ -233,7 +233,7 @@ func (prx *ReceiverProxy) RegisterSecrets(ctx context.Context) error {
 
 // RequestNewPeers updates currently available peers from the builder config hub
 func (prx *ReceiverProxy) RequestNewPeers() error {
-	builders, err := prx.ConfigHub.Builders()
+	builders, err := prx.ConfigHub.Builders(false)
 	if err != nil {
 		return err
 	}
