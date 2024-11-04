@@ -85,6 +85,7 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 				builders, err := prx.ConfigHub.Builders(true)
 				if err != nil {
 					prx.Log.Error("Failed to update peers", slog.Any("error", err))
+					continue
 				}
 
 				prx.Log.Info("Updated peers", slog.Int("peerCount", len(builders)))
@@ -98,7 +99,15 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 	}()
 
 	// update peers on the first start
-	_, _ = prx.ConfigHub.Builders(true)
+	builders, err := prx.ConfigHub.Builders(true)
+	if err != nil {
+		prx.Log.Error("Failed to update peers", slog.Any("error", err))
+	} else {
+		select {
+		case prx.updatePeers <- builders:
+		default:
+		}
+	}
 
 	return prx, nil
 }
