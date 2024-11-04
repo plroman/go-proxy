@@ -87,7 +87,7 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 					prx.Log.Error("Failed to update peers", slog.Any("error", err))
 				}
 
-				prx.Log.Info("Updated peers", slog.Any("peers", builders))
+				prx.Log.Info("Updated peers", slog.Int("peerCount", len(builders)))
 
 				select {
 				case prx.updatePeers <- builders:

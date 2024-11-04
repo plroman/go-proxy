@@ -68,6 +68,7 @@ func (sq *ShareQueue) Run() {
 		case req, more := <-sq.queue:
 			sq.log.Debug("Share queue received a request", slog.String("name", sq.name), slog.String("method", req.method))
 			if !more {
+				sq.log.Info("Share queue closing, queue channel closed")
 				return
 			}
 			if localBuilder != nil {
@@ -80,6 +81,7 @@ func (sq *ShareQueue) Run() {
 			}
 		case newPeers, more := <-sq.updatePeers:
 			if !more {
+				sq.log.Info("Share queue closing, peer channel closed")
 				return
 			}
 			for _, peer := range peers {
@@ -107,7 +109,12 @@ func (sq *ShareQueue) Run() {
 }
 
 func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer) {
+	proxiedRequestCount := 0
 	logger := sq.log.With(slog.String("peer", peer.name), slog.String("name", sq.name))
+	logger.Info("Started proxying requests to peer")
+	defer func() {
+		logger.Info("Stopped proxying requets to peer", slog.Int("proxiedRequestCount", proxiedRequestCount))
+	}()
 	for {
 		req, more := <-peer.ch
 		if !more {
@@ -150,6 +157,7 @@ func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer) {
 			incShareQueuePeerRPCErrors(peer.name)
 		}
 		incShareQueueTotalRequests(peer.name)
+		proxiedRequestCount += 1
 		logger.Debug("Message proxied")
 	}
 }
