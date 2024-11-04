@@ -260,7 +260,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
 	expectedRequest := `{"method":"eth_sendBundle","params":[{"txs":null,"blockNumber":"0x3e8","signingAddress":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf"}],"id":0,"jsonrpc":"2.0"}`
@@ -325,7 +325,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 func TestProxySendToArchive(t *testing.T) {
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
 	// we start with no peers
@@ -408,7 +408,7 @@ func TestProxyShareBundleReplacementUUIDAndCancellation(t *testing.T) {
 
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
 	// we start with no peers

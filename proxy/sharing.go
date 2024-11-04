@@ -1,7 +1,5 @@
 package proxy
 
-// TODO: use multiple connections / senders per receiver
-
 import (
 	"context"
 	"log/slog"
@@ -23,6 +21,8 @@ type ShareQueue struct {
 	updatePeers  chan []ConfighubBuilder
 	localBuilder rpcclient.RPCClient
 	signer       *signature.Signer
+	// if > 0 share queue will spawn multiple senders per peer
+	workersPerPeer int
 }
 
 type shareQueuePeer struct {
@@ -53,6 +53,10 @@ func (p *shareQueuePeer) SendRequest(log *slog.Logger, request *ParsedRequest) {
 }
 
 func (sq *ShareQueue) Run() {
+	workersPerPeer := 1
+	if sq.workersPerPeer > 0 {
+		workersPerPeer = sq.workersPerPeer
+	}
 	var (
 		localBuilder *shareQueuePeer
 		peers        []shareQueuePeer
@@ -60,7 +64,9 @@ func (sq *ShareQueue) Run() {
 	if sq.localBuilder != nil {
 		builderPeer := newShareQueuePeer("local-builder", sq.localBuilder)
 		localBuilder = &builderPeer
-		go sq.proxyRequests(localBuilder)
+		for worker := 0; worker < workersPerPeer; worker += 1 {
+			go sq.proxyRequests(localBuilder, worker)
+		}
 		defer localBuilder.Close()
 	}
 	for {
@@ -93,7 +99,7 @@ func (sq *ShareQueue) Run() {
 				if info.OrderflowProxy.EcdsaPubkeyAddress == sq.signer.Address() {
 					continue
 				}
-				client, err := RPCClientWithCertAndSigner(OrderflowProxyURLFromIP(info.IP), []byte(info.OrderflowProxy.TLSCert), sq.signer)
+				client, err := RPCClientWithCertAndSigner(OrderflowProxyURLFromIP(info.IP), []byte(info.OrderflowProxy.TLSCert), sq.signer, workersPerPeer)
 				if err != nil {
 					sq.log.Error("Failed to create a peer client", slog.Any("error", err))
 					shareQueueInternalErrors.Inc()
@@ -102,15 +108,17 @@ func (sq *ShareQueue) Run() {
 				sq.log.Info("Created client for peer", slog.String("peer", info.Name), slog.String("name", sq.name))
 				newPeer := newShareQueuePeer(info.Name, client)
 				peers = append(peers, newPeer)
-				go sq.proxyRequests(&newPeer)
+				for worker := 0; worker < workersPerPeer; worker += 1 {
+					go sq.proxyRequests(&newPeer, worker)
+				}
 			}
 		}
 	}
 }
 
-func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer) {
+func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer, worker int) {
 	proxiedRequestCount := 0
-	logger := sq.log.With(slog.String("peer", peer.name), slog.String("name", sq.name))
+	logger := sq.log.With(slog.String("peer", peer.name), slog.String("name", sq.name), slog.Int("worker", worker))
 	logger.Info("Started proxying requests to peer")
 	defer func() {
 		logger.Info("Stopped proxying requets to peer", slog.Int("proxiedRequestCount", proxiedRequestCount))

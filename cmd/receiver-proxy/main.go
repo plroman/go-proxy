@@ -74,6 +74,12 @@ var flags []cli.Flag = []cli.Flag{
 		Usage:   "Maximum size of the request body, if 0 default will be used",
 		EnvVars: []string{"MAX_REQUEST_BODY_SIZE_BYTES"},
 	},
+	&cli.IntFlag{
+		Name:    "connections-per-peer",
+		Value:   10,
+		Usage:   "Number of parallel connections for each peer",
+		EnvVars: []string{"CONN_PER_PEER"},
+	},
 
 	// certificate config
 	&cli.DurationFlag{
@@ -191,6 +197,7 @@ func main() {
 			flashbotsSignerStr := cCtx.String("flashbots-orderflow-signer-address")
 			flashbotsSignerAddress := eth.HexToAddress(flashbotsSignerStr)
 			maxRequestBodySizeBytes := cCtx.Int64("max-request-body-size-bytes")
+			connectionsPerPeer := cCtx.Int("connections-per-peer")
 
 			proxyConfig := &proxy.ReceiverProxyConfig{
 				ReceiverProxyConstantConfig: proxy.ReceiverProxyConstantConfig{Log: log, FlashbotsSignerAddress: flashbotsSignerAddress},
@@ -201,6 +208,7 @@ func main() {
 				LocalBuilderEndpoint:        builderEndpoint,
 				EthRPC:                      rpcEndpoint,
 				MaxRequestBodySizeBytes:     maxRequestBodySizeBytes,
+				ConnectionsPerPeer:          connectionsPerPeer,
 			}
 
 			instance, err := proxy.NewReceiverProxy(*proxyConfig)

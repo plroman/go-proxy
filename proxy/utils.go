@@ -32,11 +32,13 @@ func createTransportForSelfSignedCert(certPEM []byte) (*http.Transport, error) {
 	}, nil
 }
 
-func RPCClientWithCertAndSigner(endpoint string, certPEM []byte, signer *signature.Signer) (rpcclient.RPCClient, error) {
+func RPCClientWithCertAndSigner(endpoint string, certPEM []byte, signer *signature.Signer, maxOpenConnections int) (rpcclient.RPCClient, error) {
 	transport, err := createTransportForSelfSignedCert(certPEM)
 	if err != nil {
 		return nil, err
 	}
+	transport.MaxIdleConns = maxOpenConnections
+	transport.MaxIdleConnsPerHost = maxOpenConnections
 	client := rpcclient.NewClientWithOpts(endpoint, &rpcclient.RPCClientOpts{
 		HTTPClient: &http.Client{
 			Transport: transport,

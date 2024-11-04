@@ -20,6 +20,7 @@ type SenderProxyConfig struct {
 	SenderProxyConstantConfig
 	BuilderConfigHubEndpoint string
 	MaxRequestBodySizeBytes  int64
+	ConnectionsPerPeer       int
 }
 
 type SenderProxy struct {
@@ -66,11 +67,12 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 	prx.Handler = handler
 
 	queue := ShareQueue{
-		log:          prx.Log,
-		queue:        prx.shareQueue,
-		updatePeers:  prx.updatePeers,
-		localBuilder: nil,
-		signer:       prx.OrderflowSigner,
+		log:            prx.Log,
+		queue:          prx.shareQueue,
+		updatePeers:    prx.updatePeers,
+		localBuilder:   nil,
+		signer:         prx.OrderflowSigner,
+		workersPerPeer: config.ConnectionsPerPeer,
 	}
 	go queue.Run()
 

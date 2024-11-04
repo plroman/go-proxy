@@ -81,6 +81,8 @@ type ReceiverProxyConfig struct {
 	EthRPC string
 
 	MaxRequestBodySizeBytes int64
+
+	ConnectionsPerPeer int
 }
 
 func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
@@ -140,12 +142,13 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 	prx.shareQueue = shareQeueuCh
 	prx.updatePeers = updatePeersCh
 	queue := ShareQueue{
-		name:         prx.Name,
-		log:          prx.Log,
-		queue:        shareQeueuCh,
-		updatePeers:  updatePeersCh,
-		localBuilder: prx.localBuilder,
-		signer:       prx.OrderflowSigner,
+		name:           prx.Name,
+		log:            prx.Log,
+		queue:          shareQeueuCh,
+		updatePeers:    updatePeersCh,
+		localBuilder:   prx.localBuilder,
+		signer:         prx.OrderflowSigner,
+		workersPerPeer: config.ConnectionsPerPeer,
 	}
 	go queue.Run()
 
