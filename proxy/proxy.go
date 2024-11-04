@@ -20,7 +20,15 @@ var (
 	requestsRLUTTL  = time.Second * 12
 
 	peerUpdateTime = time.Minute * 5
+
+	replacementNonceSize = 4096
+	replacementNonceTTL  = time.Second * 5 * 12
 )
+
+type replacementNonceKey struct {
+	uuid   uuid.UUID
+	signer common.Address
+}
 
 type ReceiverProxy struct {
 	ReceiverProxyConstantConfig
@@ -47,6 +55,8 @@ type ReceiverProxy struct {
 	lastFetchedPeers []ConfighubBuilder
 
 	requestUniqueKeysRLU *expirable.LRU[uuid.UUID, struct{}]
+
+	replacementNonceRLU *expirable.LRU[replacementNonceKey, int]
 
 	peerUpdaterClose chan struct{}
 }
@@ -98,6 +108,7 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 		Certificate:                 certificate,
 		localBuilder:                localBuilder,
 		requestUniqueKeysRLU:        expirable.NewLRU[uuid.UUID, struct{}](requestsRLUSize, nil, requestsRLUTTL),
+		replacementNonceRLU:         expirable.NewLRU[replacementNonceKey, int](replacementNonceSize, nil, replacementNonceTTL),
 	}
 	maxRequestBodySizeBytes := DefaultMaxRequestBodySizeBytes
 	if config.MaxRequestBodySizeBytes != 0 {

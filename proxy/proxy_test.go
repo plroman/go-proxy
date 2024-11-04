@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/flashbots/go-utils/rpctypes"
 	"github.com/flashbots/go-utils/signature"
 	"github.com/stretchr/testify/require"
@@ -356,4 +361,114 @@ func TestProxySendToArchive(t *testing.T) {
 
 	expectedArchiveRequest := `{"method":"flashbots_newOrderEvents","params":[{"orderEvents":[{"eth_sendBundle":{"params":{"txs":null,"blockNumber":"0x7b","signingAddress":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf"},"metadata":{"receivedAt":1730000000000}}},{"eth_sendBundle":{"params":{"txs":null,"blockNumber":"0x1c8","signingAddress":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf"},"metadata":{"receivedAt":1730000000000}}}]}],"id":0,"jsonrpc":"2.0"}`
 	require.Equal(t, expectedArchiveRequest, archiveRequest.body)
+}
+
+func createTestTx(i int) *hexutil.Bytes {
+	privateKey, err := crypto.HexToECDSA("c7589782d55a642c8ced7794ddcb24b62d4ebefbb81001034cb46545ff80e39e")
+	if err != nil {
+		panic(err)
+	}
+
+	chainID := big.NewInt(1)
+	txData := &types.DynamicFeeTx{
+		ChainID:    chainID,
+		Nonce:      uint64(i),
+		GasTipCap:  big.NewInt(1),
+		GasFeeCap:  big.NewInt(1),
+		Gas:        21000,
+		To:         &common.Address{},
+		Value:      big.NewInt(0),
+		Data:       nil,
+		AccessList: nil,
+	}
+	tx, err := types.SignNewTx(privateKey, types.LatestSignerForChainID(big.NewInt(1)), txData)
+	if err != nil {
+		panic(err)
+	}
+	binary, err := tx.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	hexBytes := hexutil.Bytes(binary)
+	return &hexBytes
+}
+
+func TestProxyShareBundleReplacementUUIDAndCancellation(t *testing.T) {
+	defer func() {
+		proxiesFlushQueue()
+		for {
+			select {
+			case <-time.After(time.Millisecond * 100):
+				expectNoRequest(t, archiveServerRequests)
+				return
+			case <-archiveServerRequests:
+			}
+		}
+	}()
+
+	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
+	require.NoError(t, err)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer)
+	require.NoError(t, err)
+
+	// we start with no peers
+	builderHubPeers = nil
+	err = proxies[0].proxy.RegisterSecrets(context.Background())
+	require.NoError(t, err)
+	proxiesUpdatePeers(t)
+
+	// first call
+	resp, err := client.Call(context.Background(), MevSendBundleMethod, &rpctypes.MevSendBundleArgs{
+		Version:         "v0.1",
+		ReplacementUUID: "550e8400-e29b-41d4-a716-446655440000",
+		Inclusion: rpctypes.MevBundleInclusion{
+			BlockNumber: 10,
+		},
+		Body: []rpctypes.MevBundleBody{
+			{
+				Tx: createTestTx(0),
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+
+	expectedRequest := `{"method":"mev_sendBundle","params":[{"version":"v0.1","replacementUuid":"550e8400-e29b-41d4-a716-446655440000","inclusion":{"block":"0xa","maxBlock":"0x0"},"body":[{"tx":"0x02f862018001018252089400000000000000000000000000000000000000008080c001a05900a5ea3e4e07980b0d6276e2764b734be64d64c20f3eb87746c7ed1d72aa26a073f3a0877bd80098bd720afd1ba2c6d2d9c76d87cbc23f098d7be74902d9bfd4"}],"validity":{},"metadata":{"signer":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf","replacementNonce":0}}],"id":0,"jsonrpc":"2.0"}`
+
+	builderRequest := expectRequest(t, proxies[0].localBuilderRequests)
+	require.Equal(t, expectedRequest, builderRequest.body)
+
+	// second call
+	resp, err = client.Call(context.Background(), MevSendBundleMethod, &rpctypes.MevSendBundleArgs{
+		Version:         "v0.1",
+		ReplacementUUID: "550e8400-e29b-41d4-a716-446655440000",
+		Inclusion: rpctypes.MevBundleInclusion{
+			BlockNumber: 10,
+		},
+		Body: []rpctypes.MevBundleBody{
+			{
+				Tx: createTestTx(1),
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+
+	expectedRequest = `{"method":"mev_sendBundle","params":[{"version":"v0.1","replacementUuid":"550e8400-e29b-41d4-a716-446655440000","inclusion":{"block":"0xa","maxBlock":"0x0"},"body":[{"tx":"0x02f862010101018252089400000000000000000000000000000000000000008080c001a03b5edc6a7fe16f7c7bf25c56281b86107e742a922f900ac94293225b380fd5bea00f2ea6392842711064ca5c0fe12d812a60e8936ec8dc13ca95ecde8b262fd1fe"}],"validity":{},"metadata":{"signer":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf","replacementNonce":1}}],"id":0,"jsonrpc":"2.0"}`
+
+	builderRequest = expectRequest(t, proxies[0].localBuilderRequests)
+	require.Equal(t, expectedRequest, builderRequest.body)
+
+	// cancell
+	resp, err = client.Call(context.Background(), MevSendBundleMethod, &rpctypes.MevSendBundleArgs{
+		Version:         "v0.1",
+		ReplacementUUID: "550e8400-e29b-41d4-a716-446655440000",
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+
+	expectedRequest = `{"method":"mev_sendBundle","params":[{"version":"v0.1","replacementUuid":"550e8400-e29b-41d4-a716-446655440000","inclusion":{"block":"0x0","maxBlock":"0x0"},"body":null,"validity":{},"metadata":{"signer":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf","replacementNonce":2,"cancelled":true}}],"id":0,"jsonrpc":"2.0"}`
+
+	builderRequest = expectRequest(t, proxies[0].localBuilderRequests)
+	require.Equal(t, expectedRequest, builderRequest.body)
 }

@@ -15,6 +15,8 @@ var (
 	errRefundPercent    = errors.New("refund percent field should not be set")
 	errRefundRecipient  = errors.New("refund recipient field should not be set")
 	errRefundTxHashes   = errors.New("refund tx hashes field should not be set")
+
+	errLocalEndpointSbundleMetadata = errors.New("mev share bundle should not containt metadata when sent to local endpoint")
 )
 
 func ValidateEthSendBundle(args *rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
@@ -54,8 +56,18 @@ func ValidateEthCancelBundle(args *rpctypes.EthCancelBundleArgs, publicEndpoint 
 	return nil
 }
 
-func ValidateMevSendBundle(args *rpctypes.MevSendBundleArgs, _ bool) error {
+func ValidateMevSendBundle(args *rpctypes.MevSendBundleArgs, publicEndpoint bool) error {
 	// @perf it calculates hash
 	_, err := args.Validate()
-	return err
+	if err != nil {
+		return err
+	}
+
+	if !publicEndpoint {
+		if args.Metadata != nil {
+			return errLocalEndpointSbundleMetadata
+		}
+	}
+
+	return nil
 }

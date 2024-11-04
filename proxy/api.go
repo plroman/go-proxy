@@ -29,6 +29,8 @@ var (
 	errSubsidyWrongEndpoint = errors.New("subsidy can only be called on public method")
 	errSubsidyWrongCaller   = errors.New("subsidy can only be called by Flashbots")
 
+	errUUIDParse = errors.New("failed to parse UUID")
+
 	apiNow = time.Now
 )
 
@@ -146,7 +148,6 @@ func (prx *ReceiverProxy) MevSendBundle(ctx context.Context, mevSendBundle rpcty
 		return err
 	}
 
-	// TODO: make sure that cancellations are handled by the builder properly
 	err = ValidateMevSendBundle(&mevSendBundle, publicEndpoint)
 	if err != nil {
 		return err
@@ -156,8 +157,33 @@ func (prx *ReceiverProxy) MevSendBundle(ctx context.Context, mevSendBundle rpcty
 		mevSendBundle.Metadata = &rpctypes.MevBundleMetadata{
 			Signer: &parsedRequest.signer,
 		}
+		if mevSendBundle.ReplacementUUID != "" {
+			replUUID, err := uuid.Parse(mevSendBundle.ReplacementUUID)
+			if err != nil {
+				return errors.Join(errUUIDParse, err)
+			}
+			replacementKey := replacementNonceKey{
+				uuid:   replUUID,
+				signer: parsedRequest.signer,
+			}
+			// this is not atomic but the normal user will not send multiple replacements in parallel
+			nonce, ok := prx.replacementNonceRLU.Peek(replacementKey)
+			if ok {
+				nonce += 1
+			} else {
+				nonce = 0
+			}
+			prx.replacementNonceRLU.Add(replacementKey, nonce)
+			mevSendBundle.Metadata.ReplacementNonce = &nonce
+
+			if len(mevSendBundle.Body) == 0 {
+				cancelled := true
+				mevSendBundle.Metadata.Cancelled = &cancelled
+			}
+		}
 	}
 
+	// @note: unique key filterst same requests and it can interact with cancellations (you can't cancel multiple times per block)
 	uniqueKey := mevSendBundle.UniqueKey()
 	parsedRequest.requestArgUniqueKey = &uniqueKey
 
