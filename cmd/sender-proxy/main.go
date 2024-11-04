@@ -109,34 +109,6 @@ func main() {
 			exit := make(chan os.Signal, 1)
 			signal.Notify(exit, os.Interrupt, syscall.SIGTERM)
 
-			// metrics server
-			go func() {
-				metricsAddr := cCtx.String("metrics-addr")
-				usePprof := cCtx.Bool("pprof")
-				metricsMux := http.NewServeMux()
-				metricsMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-					metrics.WritePrometheus(w, true)
-				})
-				if usePprof {
-					metricsMux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
-					metricsMux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
-					metricsMux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
-					metricsMux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
-					metricsMux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
-				}
-
-				metricsServer := &http.Server{
-					Addr:              metricsAddr,
-					ReadHeaderTimeout: 5 * time.Second,
-					Handler:           metricsMux,
-				}
-
-				err := metricsServer.ListenAndServe()
-				if err != nil {
-					log.Error("Failed to start metrics server", "err", err)
-				}
-			}()
-
 			builderConfigHubEndpoint := cCtx.String("builder-confighub-endpoint")
 			orderflowSignerKeyStr := cCtx.String("orderflow-signer-key")
 			orderflowSigner, err := signature.NewSignerFromHexPrivateKey(orderflowSignerKeyStr)
@@ -169,6 +141,41 @@ func main() {
 			}
 
 			log.Info("Started sender proxy", "listenAddres", listenAddr)
+
+			// metrics server
+			go func() {
+				metricsAddr := cCtx.String("metrics-addr")
+				usePprof := cCtx.Bool("pprof")
+				metricsMux := http.NewServeMux()
+				metricsMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+					metrics.WritePrometheus(w, true)
+				})
+				metricsMux.HandleFunc("/update_peers", func(w http.ResponseWriter, r *http.Request) {
+					select {
+					case instance.PeerUpdateForce <- struct{}{}:
+					default:
+					}
+					w.WriteHeader(http.StatusOK)
+				})
+				if usePprof {
+					metricsMux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+					metricsMux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+					metricsMux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+					metricsMux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+					metricsMux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+				}
+
+				metricsServer := &http.Server{
+					Addr:              metricsAddr,
+					ReadHeaderTimeout: 5 * time.Second,
+					Handler:           metricsMux,
+				}
+
+				err := metricsServer.ListenAndServe()
+				if err != nil {
+					log.Error("Failed to start metrics server", "err", err)
+				}
+			}()
 
 			<-exit
 			servers.Stop()

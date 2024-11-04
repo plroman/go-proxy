@@ -30,7 +30,7 @@ type SenderProxy struct {
 	updatePeers chan []ConfighubBuilder
 	shareQueue  chan *ParsedRequest
 
-	peerUpdaterClose chan struct{}
+	PeerUpdateForce chan struct{}
 }
 
 func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
@@ -45,7 +45,7 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 		Handler:                   nil,
 		updatePeers:               make(chan []ConfighubBuilder),
 		shareQueue:                make(chan *ParsedRequest),
-		peerUpdaterClose:          make(chan struct{}),
+		PeerUpdateForce:           make(chan struct{}),
 	}
 
 	handler, err := rpcserver.NewJSONRPCHandler(rpcserver.Methods{
@@ -77,37 +77,28 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 	go func() {
 		for {
 			select {
-			case _, more := <-prx.peerUpdaterClose:
+			case _, more := <-prx.PeerUpdateForce:
 				if !more {
 					return
 				}
 			case <-time.After(peerUpdateTime):
-				builders, err := prx.ConfigHub.Builders(true)
-				if err != nil {
-					prx.Log.Error("Failed to update peers", slog.Any("error", err))
-					continue
-				}
+			}
+			builders, err := prx.ConfigHub.Builders(true)
+			if err != nil {
+				prx.Log.Error("Failed to update peers", slog.Any("error", err))
+				continue
+			}
 
-				prx.Log.Info("Updated peers", slog.Int("peerCount", len(builders)))
+			prx.Log.Info("Updated peers", slog.Int("peerCount", len(builders)))
 
-				select {
-				case prx.updatePeers <- builders:
-				default:
-				}
+			select {
+			case prx.updatePeers <- builders:
+			default:
 			}
 		}
 	}()
 
-	// update peers on the first start
-	builders, err := prx.ConfigHub.Builders(true)
-	if err != nil {
-		prx.Log.Error("Failed to update peers", slog.Any("error", err))
-	} else {
-		select {
-		case prx.updatePeers <- builders:
-		default:
-		}
-	}
+	prx.PeerUpdateForce <- struct{}{}
 
 	return prx, nil
 }
@@ -115,14 +106,13 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 func (prx *SenderProxy) Stop() {
 	close(prx.shareQueue)
 	close(prx.updatePeers)
-	close(prx.peerUpdaterClose)
+	close(prx.PeerUpdateForce)
 }
 
 func (prx *SenderProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctypes.EthSendBundleArgs) error {
 	parsedRequest := ParsedRequest{
-		publicEndpoint: true,
-		ethSendBundle:  &ethSendBundle,
-		method:         EthSendBundleMethod,
+		ethSendBundle: &ethSendBundle,
+		method:        EthSendBundleMethod,
 	}
 
 	err := ValidateEthSendBundle(&ethSendBundle, true)
@@ -135,9 +125,8 @@ func (prx *SenderProxy) EthSendBundle(ctx context.Context, ethSendBundle rpctype
 
 func (prx *SenderProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctypes.MevSendBundleArgs) error {
 	parsedRequest := ParsedRequest{
-		publicEndpoint: true,
-		mevSendBundle:  &mevSendBundle,
-		method:         MevSendBundleMethod,
+		mevSendBundle: &mevSendBundle,
+		method:        MevSendBundleMethod,
 	}
 
 	err := ValidateMevSendBundle(&mevSendBundle, true)
@@ -150,7 +139,6 @@ func (prx *SenderProxy) MevSendBundle(ctx context.Context, mevSendBundle rpctype
 
 func (prx *SenderProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpctypes.EthCancelBundleArgs) error {
 	parsedRequest := ParsedRequest{
-		publicEndpoint:  true,
 		ethCancelBundle: &ethCancelBundle,
 		method:          EthCancelBundleMethod,
 	}
@@ -165,7 +153,6 @@ func (prx *SenderProxy) EthCancelBundle(ctx context.Context, ethCancelBundle rpc
 
 func (prx *SenderProxy) EthSendRawTransaction(ctx context.Context, ethSendRawTransaction rpctypes.EthSendRawTransactionArgs) error {
 	parsedRequest := ParsedRequest{
-		publicEndpoint:        true,
 		ethSendRawTransaction: &ethSendRawTransaction,
 		method:                EthSendRawTransactionMethod,
 	}
@@ -174,7 +161,6 @@ func (prx *SenderProxy) EthSendRawTransaction(ctx context.Context, ethSendRawTra
 
 func (prx *SenderProxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock rpctypes.BidSubsisideBlockArgs) error {
 	parsedRequest := ParsedRequest{
-		publicEndpoint:    true,
 		bidSubsidiseBlock: &bidSubsidiseBlock,
 		method:            BidSubsidiseBlockMethod,
 	}
