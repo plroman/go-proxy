@@ -96,6 +96,10 @@ func NewSenderProxy(config SenderProxyConfig) (*SenderProxy, error) {
 			}
 		}
 	}()
+
+	// update peers on the first start
+	_, _ = prx.ConfigHub.Builders(true)
+
 	return prx, nil
 }
 
@@ -171,7 +175,7 @@ func (prx *SenderProxy) BidSubsidiseBlock(ctx context.Context, bidSubsidiseBlock
 
 func (prx *SenderProxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
 	parsedRequest.receivedAt = apiNow()
-	prx.Log.Info("Received request", slog.String("method", parsedRequest.method))
+	prx.Log.Debug("Received request", slog.String("method", parsedRequest.method))
 
 	select {
 	case <-ctx.Done():

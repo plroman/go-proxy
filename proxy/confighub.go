@@ -41,7 +41,7 @@ func (b *BuilderConfigHub) RegisterCredentials(ctx context.Context, info Configh
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPost, b.endpoint+"/api/l1-builder/v1/register_credentials/orderflow-proxy", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, b.endpoint+"/api/l1-builder/v1/register_credentials/orderflow_proxy", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -89,5 +89,6 @@ func (b *BuilderConfigHub) Builders(internal bool) (result []ConfighubBuilder, e
 	if err != nil {
 		return nil, err
 	}
+	b.log.Info("Received list of peers from confighub", slog.Bool("internalEndpoint", internal), slog.Any("peers", result))
 	return
 }

@@ -304,7 +304,7 @@ type ParsedRequest struct {
 
 func (prx *ReceiverProxy) HandleParsedRequest(ctx context.Context, parsedRequest ParsedRequest) error {
 	parsedRequest.receivedAt = apiNow()
-	prx.Log.Info("Received request", slog.Bool("isPublicEndpoint", parsedRequest.publicEndpoint), slog.String("method", parsedRequest.method))
+	prx.Log.Debug("Received request", slog.Bool("isPublicEndpoint", parsedRequest.publicEndpoint), slog.String("method", parsedRequest.method))
 	if parsedRequest.publicEndpoint {
 		incAPIIncomingRequestsByPeer(parsedRequest.peerName)
 	}

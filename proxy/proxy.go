@@ -182,6 +182,9 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 		}
 	}()
 
+	// request peers on the first start
+	_ = prx.RequestNewPeers()
+
 	return prx, nil
 }
 

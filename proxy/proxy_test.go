@@ -120,7 +120,7 @@ func TestMain(m *testing.M) {
 		body, _ := io.ReadAll(r.Body)
 		defer r.Body.Close()
 
-		if r.URL.Path == "/api/l1-builder/v1/register_credentials/orderflow-proxy" {
+		if r.URL.Path == "/api/l1-builder/v1/register_credentials/orderflow_proxy" {
 			var req ConfighubOrderflowProxyCredentials
 			err := json.Unmarshal(body, &req)
 			if err != nil {
