@@ -23,6 +23,8 @@ var (
 
 	replacementNonceSize = 4096
 	replacementNonceTTL  = time.Second * 5 * 12
+
+	ReceiverProxyWorkerQueueSize = 10000
 )
 
 type replacementNonceKey struct {
@@ -138,7 +140,7 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 		}
 	})
 
-	shareQeueuCh := make(chan *ParsedRequest)
+	shareQeueuCh := make(chan *ParsedRequest, ReceiverProxyWorkerQueueSize)
 	updatePeersCh := make(chan []ConfighubBuilder)
 	prx.shareQueue = shareQeueuCh
 	prx.updatePeers = updatePeersCh
@@ -153,7 +155,7 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 	}
 	go queue.Run()
 
-	archiveQueueCh := make(chan *ParsedRequest)
+	archiveQueueCh := make(chan *ParsedRequest, ReceiverProxyWorkerQueueSize)
 	archiveFlushCh := make(chan struct{})
 	prx.archiveQueue = archiveQueueCh
 	prx.archiveFlushQueue = archiveFlushCh

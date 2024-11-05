@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	jobBufferSize  = 4096
-	requestTimeout = time.Second * 10
+	ShareWorkerQueueSize = 10000
+	requestTimeout       = time.Second * 10
 )
 
 type ShareQueue struct {
@@ -33,7 +33,7 @@ type shareQueuePeer struct {
 
 func newShareQueuePeer(name string, client rpcclient.RPCClient) shareQueuePeer {
 	return shareQueuePeer{
-		ch:     make(chan *ParsedRequest, jobBufferSize),
+		ch:     make(chan *ParsedRequest, ShareWorkerQueueSize),
 		name:   name,
 		client: client,
 	}

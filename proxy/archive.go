@@ -22,6 +22,8 @@ var (
 	errArchivePublicRequest = errors.New("public RPC request should not reach archive")
 
 	ArchiveRequestTimeout = time.Second * 30
+
+	ArchiveWorkerQueueSize = 10000
 )
 
 type ArchiveQueue struct {
@@ -39,7 +41,7 @@ func (aq *ArchiveQueue) Run() {
 	if aq.workerCount > 0 {
 		workerCount = aq.workerCount
 	}
-	workersQueue := make(chan *ParsedRequest)
+	workersQueue := make(chan *ParsedRequest, ArchiveWorkerQueueSize)
 	for w := 0; w < workerCount; w++ {
 		worker := &archiveQueueWorker{
 			log:           aq.log.With(slog.Int("worker", w)),
