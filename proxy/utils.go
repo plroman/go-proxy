@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -16,7 +16,7 @@ import (
 	"github.com/flashbots/go-utils/signature"
 )
 
-var DefaultOrderflowProxyPublicPort = 5544
+var DefaultOrderflowProxyPublicPort = "5544"
 
 var errCertificate = errors.New("failed to add certificate to pool")
 
@@ -27,7 +27,8 @@ func createTransportForSelfSignedCert(certPEM []byte) (*http.Transport, error) {
 	}
 	return &http.Transport{
 		TLSClientConfig: &tls.Config{
-			RootCAs: certPool,
+			RootCAs:    certPool,
+			MinVersion: tls.VersionTLS12,
 		},
 	}, nil
 }
@@ -41,7 +42,7 @@ func HTTPClientWithMaxConnections(maxOpenConnections int) *http.Client {
 	}
 }
 
-func RPCClientWithCertAndSigner(endpoint string, certPEM []byte, signer *signature.Signer, maxOpenConnections int) (rpcclient.RPCClient, error) {
+func RPCClientWithCertAndSigner(endpoint string, certPEM []byte, signer *signature.Signer, maxOpenConnections int) (rpcclient.RPCClient, error) { //nolint:ireturn
 	transport, err := createTransportForSelfSignedCert(certPEM)
 	if err != nil {
 		return nil, err
@@ -59,9 +60,9 @@ func RPCClientWithCertAndSigner(endpoint string, certPEM []byte, signer *signatu
 
 func OrderflowProxyURLFromIP(ip string) string {
 	if strings.Contains(ip, ":") {
-		return fmt.Sprintf("https://%s", ip)
+		return "https://" + ip
 	} else {
-		return fmt.Sprintf("https://%s:%d", ip, DefaultOrderflowProxyPublicPort)
+		return "https://" + net.JoinHostPort(ip, DefaultOrderflowProxyPublicPort)
 	}
 }
 

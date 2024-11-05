@@ -28,7 +28,7 @@ var flags []cli.Flag = []cli.Flag{
 	&cli.StringFlag{
 		Name:    "builder-confighub-endpoint",
 		Value:   "http://127.0.0.1:14892",
-		Usage:   "address of the builder config hub enpoint (directly or throught the cvm-proxy)",
+		Usage:   "address of the builder config hub enpoint (directly or using the cvm-proxy)",
 		EnvVars: []string{"BUILDER_CONFIGHUB_ENDPOINT"},
 	},
 	&cli.StringFlag{

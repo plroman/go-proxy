@@ -77,28 +77,28 @@ func StartTestOrderflowProxy(name string) (*OrderflowProxyTestSetup, error) {
 	localBuilderServer := ServeHTTPRequestToChan(localBuilderRequests)
 
 	proxy := createProxy(localBuilderServer.URL, name)
-	publicProxyServer := &http.Server{
+	publicProxyServer := &http.Server{ //nolint:gosec
 		Handler:   proxy.PublicHandler,
 		TLSConfig: proxy.TLSConfig(),
 	}
-	publicListener, err := net.Listen("tcp", ":0")
+	publicListener, err := net.Listen("tcp", ":0") //nolint:gosec
 	if err != nil {
 		return nil, err
 	}
-	go publicProxyServer.ServeTLS(publicListener, "", "") //nolint: errcheck
-	publicServerEndpoint := fmt.Sprintf("https://localhost:%d", publicListener.Addr().(*net.TCPAddr).Port)
-	ip := fmt.Sprintf("127.0.0.1:%d", publicListener.Addr().(*net.TCPAddr).Port)
+	go publicProxyServer.ServeTLS(publicListener, "", "")                                                  //nolint: errcheck
+	publicServerEndpoint := fmt.Sprintf("https://localhost:%d", publicListener.Addr().(*net.TCPAddr).Port) //nolint:forcetypeassert
+	ip := fmt.Sprintf("127.0.0.1:%d", publicListener.Addr().(*net.TCPAddr).Port)                           //nolint:forcetypeassert
 
-	localProxyServer := &http.Server{
+	localProxyServer := &http.Server{ //nolint:gosec
 		Handler:   proxy.LocalHandler,
 		TLSConfig: proxy.TLSConfig(),
 	}
-	localListener, err := net.Listen("tcp", ":0")
+	localListener, err := net.Listen("tcp", ":0") //nolint:gosec
 	if err != nil {
 		return nil, err
 	}
-	go localProxyServer.ServeTLS(localListener, "", "") //nolint:errcheck
-	localServerEndpoint := fmt.Sprintf("https://localhost:%d", localListener.Addr().(*net.TCPAddr).Port)
+	go localProxyServer.ServeTLS(localListener, "", "")                                                  //nolint:errcheck
+	localServerEndpoint := fmt.Sprintf("https://localhost:%d", localListener.Addr().(*net.TCPAddr).Port) //nolint:forcetypeassert
 
 	certProxyServer := httptest.NewServer(proxy.CertHandler)
 
@@ -160,7 +160,7 @@ func TestMain(m *testing.M) {
 	archiveServer = ServeHTTPRequestToChan(archiveServerRequests)
 	defer archiveServer.Close()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		proxy, err := StartTestOrderflowProxy(fmt.Sprintf("proxy:%d", i))
 		proxies = append(proxies, proxy)
 		if err != nil {
@@ -233,6 +233,7 @@ func expectNoRequest(t *testing.T, ch chan *RequestData) {
 }
 
 func proxiesUpdatePeers(t *testing.T) {
+	t.Helper()
 	for _, instance := range proxies {
 		err := instance.proxy.RequestNewPeers()
 		require.NoError(t, err)

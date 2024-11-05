@@ -74,7 +74,7 @@ func (b *BuilderConfigHub) Builders(internal bool) (result []ConfighubBuilder, e
 	} else {
 		url += "/api/l1-builder/v1/builders"
 	}
-	resp, err = http.Get(url)
+	resp, err = http.Get(url) //nolint:gosec
 	if err != nil {
 		return
 	}

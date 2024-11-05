@@ -39,13 +39,13 @@ type ArchiveQueue struct {
 }
 
 func (aq *ArchiveQueue) Run() {
-	var workers []*archiveQueueWorker
 	workerCount := 1
 	if aq.workerCount > 0 {
 		workerCount = aq.workerCount
 	}
+	workers := make([]*archiveQueueWorker, 0, workerCount)
 	workersQueue := make(chan *ParsedRequest, ArchiveWorkerQueueSize)
-	for w := 0; w < workerCount; w++ {
+	for w := range workerCount {
 		worker := &archiveQueueWorker{
 			log:           aq.log.With(slog.Int("worker", w)),
 			archiveClient: aq.archiveClient,
