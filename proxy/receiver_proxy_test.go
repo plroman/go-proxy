@@ -46,6 +46,7 @@ func ServeHTTPRequestToChan(channel chan *RequestData) *httptest.Server {
 
 		channel <- &RequestData{body: string(body), request: r}
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
 	}))
 }
 

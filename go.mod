@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/VictoriaMetrics/metrics v1.35.1
+	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/ethereum/go-ethereum v1.14.10
 	github.com/flashbots/go-utils v0.8.1-0.20241104120502-7337c4b9d7b6
 	github.com/google/uuid v1.6.0

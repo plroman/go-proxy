@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/flashbots/go-utils/rpcclient"
 	"github.com/flashbots/go-utils/rpctypes"
@@ -20,8 +21,10 @@ var (
 	ArchiveBatchSizeFlushTimeout = time.Second * 6
 
 	errArchivePublicRequest = errors.New("public RPC request should not reach archive")
+	errArchiveReturnedError = errors.New("ordreflow archive returned error")
 
-	ArchiveRequestTimeout = time.Second * 30
+	ArchiveRequestTimeout = time.Second * 15
+	ArchiveRetryMaxTime   = time.Second * 120
 
 	ArchiveWorkerQueueSize = 10000
 )
@@ -123,6 +126,7 @@ func (aq *ArchiveQueue) updateParsedRequest(input *ParsedRequest) (*ParsedReques
 		}
 		mevSendBundle.Version = "v0.1"
 		mevSendBundle.Inclusion.BlockNumber = hexutil.Uint64(block)
+		// we set max block to be +5 here because thats roughly the amount of time that mempool tx lives inside the builder orderpool
 		mevSendBundle.Inclusion.MaxBlock = hexutil.Uint64(block + 5)
 		mevSendBundle.Body = []rpctypes.MevBundleBody{{Tx: (*hexutil.Bytes)(input.ethSendRawTransaction), CanRevert: true}}
 		signer := input.signer
@@ -154,20 +158,31 @@ func (aqw *archiveQueueWorker) close() {
 }
 
 func (aqw *archiveQueueWorker) runWorker() {
-	var pendingBatch []*ParsedRequest
+	var (
+		pendingBatch []*ParsedRequest
+		needFlush    = false
+	)
+
 	for {
+		if needFlush {
+			aqw.flush(pendingBatch)
+			pendingBatch = nil
+			needFlush = false
+		}
 		select {
 		case req, more := <-aqw.queue:
 			if !more {
 				return
 			}
 			pendingBatch = append(pendingBatch, req)
+			if len(pendingBatch) > ArchiveBatchSize {
+				needFlush = true
+			}
 		case _, more := <-aqw.flushQueue:
 			if !more {
 				return
 			}
-			aqw.flush(pendingBatch)
-			pendingBatch = nil
+			needFlush = true
 		}
 	}
 }
@@ -204,25 +219,37 @@ func (aqw *archiveQueueWorker) flush(batch []*ParsedRequest) {
 	if len(args.OrderEvents) == 0 {
 		return
 	}
-	aqw.log.Info("Sending batch to the archive", slog.Int("size", len(args.OrderEvents)))
-	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), ArchiveRequestTimeout)
-	defer cancel()
-	res, err := aqw.archiveClient.Call(ctx, NewOrderEventsMethod, args)
-	archiveEventsRPCDuration.Update(float64(time.Since(start).Milliseconds()))
 
-	callFailed := false
+	aqw.log.Info("Sending batch to the archive", slog.Int("size", len(args.OrderEvents)))
+
+	exp := backoff.NewExponentialBackOff()
+	exp.MaxElapsedTime = ArchiveRetryMaxTime
+
+	err := backoff.Retry(func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), ArchiveRequestTimeout)
+		defer cancel()
+
+		start := time.Now()
+		res, err := aqw.archiveClient.Call(ctx, NewOrderEventsMethod, args)
+		archiveEventsRPCDuration.Update(float64(time.Since(start).Milliseconds()))
+
+		if err != nil {
+			aqw.log.Error("Error while making RPC request to archive", slog.Any("error", err))
+			archiveEventsRPCErrors.Inc()
+			return err
+		}
+		if res != nil && res.Error != nil {
+			aqw.log.Error("Archive returned error", slog.Any("error", res.Error))
+			archiveEventsRPCErrors.Inc()
+			return errArchiveReturnedError
+		}
+		return nil
+	}, exp)
+
 	if err != nil {
-		aqw.log.Error("Error while making RPC request to archive", slog.Any("error", err))
-		archiveEventsRPCErrors.Inc()
-		callFailed = true
-	}
-	if res != nil && res.Error != nil {
-		aqw.log.Error("Archive returned error", slog.Any("error", res.Error))
-		archiveEventsRPCErrors.Inc()
-		callFailed = true
-	}
-	if !callFailed {
+		aqw.log.Error("Failed to submit batch to the archive", slog.Any("error", err))
+	} else {
+		aqw.log.Info("Successfully submitted batch to the archive")
 		archiveEventsRPCSentCounter.AddInt64(int64(len(args.OrderEvents)))
 	}
 }
