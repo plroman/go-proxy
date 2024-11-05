@@ -13,6 +13,7 @@ import (
 	"github.com/flashbots/go-utils/signature"
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -61,6 +62,8 @@ type ReceiverProxy struct {
 	replacementNonceRLU *expirable.LRU[replacementNonceKey, int]
 
 	peerUpdaterClose chan struct{}
+
+	localAPIRateLimiter *rate.Limiter
 }
 
 type ReceiverProxyConstantConfig struct {
@@ -86,6 +89,7 @@ type ReceiverProxyConfig struct {
 	MaxRequestBodySizeBytes int64
 
 	ConnectionsPerPeer int
+	MaxLocalRPS        int
 }
 
 func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
@@ -105,6 +109,11 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 
 	localBuilder := rpcclient.NewClient(config.LocalBuilderEndpoint)
 
+	limit := rate.Limit(config.MaxLocalRPS)
+	if config.MaxLocalRPS == 0 {
+		limit = rate.Inf
+	}
+	localAPIRateLimiter := rate.NewLimiter(limit, config.MaxLocalRPS)
 	prx := &ReceiverProxy{
 		ReceiverProxyConstantConfig: config.ReceiverProxyConstantConfig,
 		ConfigHub:                   NewBuilderConfigHub(config.Log, config.BuilderConfigHubEndpoint),
@@ -114,6 +123,7 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 		localBuilder:                localBuilder,
 		requestUniqueKeysRLU:        expirable.NewLRU[uuid.UUID, struct{}](requestsRLUSize, nil, requestsRLUTTL),
 		replacementNonceRLU:         expirable.NewLRU[replacementNonceKey, int](replacementNonceSize, nil, replacementNonceTTL),
+		localAPIRateLimiter:         localAPIRateLimiter,
 	}
 	maxRequestBodySizeBytes := DefaultMaxRequestBodySizeBytes
 	if config.MaxRequestBodySizeBytes != 0 {

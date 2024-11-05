@@ -80,6 +80,12 @@ var flags []cli.Flag = []cli.Flag{
 		Usage:   "Number of parallel connections for each peer and archival RPC",
 		EnvVars: []string{"CONN_PER_PEER"},
 	},
+	&cli.IntFlag{
+		Name:    "max-local-requests-per-second",
+		Value:   100,
+		Usage:   "Maximum number of unique local requests per second",
+		EnvVars: []string{"MAX_LOCAL_RPS"},
+	},
 
 	// certificate config
 	&cli.DurationFlag{
@@ -198,6 +204,7 @@ func main() {
 			flashbotsSignerAddress := eth.HexToAddress(flashbotsSignerStr)
 			maxRequestBodySizeBytes := cCtx.Int64("max-request-body-size-bytes")
 			connectionsPerPeer := cCtx.Int("connections-per-peer")
+			maxLocalRPS := cCtx.Int("max-local-requests-per-second")
 
 			proxyConfig := &proxy.ReceiverProxyConfig{
 				ReceiverProxyConstantConfig: proxy.ReceiverProxyConstantConfig{Log: log, FlashbotsSignerAddress: flashbotsSignerAddress},
@@ -210,6 +217,7 @@ func main() {
 				EthRPC:                      rpcEndpoint,
 				MaxRequestBodySizeBytes:     maxRequestBodySizeBytes,
 				ConnectionsPerPeer:          connectionsPerPeer,
+				MaxLocalRPS:                 maxLocalRPS,
 			}
 
 			instance, err := proxy.NewReceiverProxy(*proxyConfig)

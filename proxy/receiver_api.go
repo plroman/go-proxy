@@ -28,6 +28,7 @@ var (
 	errUnknownPeer          = errors.New("unknown peers can't send to the public address")
 	errSubsidyWrongEndpoint = errors.New("subsidy can only be called on public method")
 	errSubsidyWrongCaller   = errors.New("subsidy can only be called by Flashbots")
+	errRateLimiting         = errors.New("requests to local API are rate limited")
 
 	errUUIDParse = errors.New("failed to parse UUID")
 
@@ -314,6 +315,12 @@ func (prx *ReceiverProxy) HandleParsedRequest(ctx context.Context, parsedRequest
 			return nil
 		}
 		prx.requestUniqueKeysRLU.Add(*parsedRequest.requestArgUniqueKey, struct{}{})
+	}
+	if !parsedRequest.publicEndpoint {
+		err := prx.localAPIRateLimiter.Wait(ctx)
+		if err != nil {
+			return errors.Join(errRateLimiting, err)
+		}
 	}
 	select {
 	case <-ctx.Done():

@@ -189,6 +189,7 @@ func createProxy(localBuilder, name string) *ReceiverProxy {
 		ArchiveEndpoint:          archiveServer.URL,
 		LocalBuilderEndpoint:     localBuilder,
 		EthRPC:                   "eth-rpc-not-set",
+		MaxLocalRPS:              10,
 	})
 	if err != nil {
 		panic(err)
