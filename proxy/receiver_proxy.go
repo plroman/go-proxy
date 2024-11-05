@@ -75,6 +75,7 @@ type ReceiverProxyConfig struct {
 
 	BuilderConfigHubEndpoint string
 	ArchiveEndpoint          string
+	ArchiveConnections       int
 	LocalBuilderEndpoint     string
 
 	// EthRPC should support eth_blockNumber API
@@ -156,8 +157,10 @@ func NewReceiverProxy(config ReceiverProxyConfig) (*ReceiverProxy, error) {
 	archiveFlushCh := make(chan struct{})
 	prx.archiveQueue = archiveQueueCh
 	prx.archiveFlushQueue = archiveFlushCh
+	archiveHTTPClient := HTTPClientWithMaxConnections(config.ArchiveConnections)
 	archiveClient := rpcclient.NewClientWithOpts(config.ArchiveEndpoint, &rpcclient.RPCClientOpts{
-		Signer: orderflowSigner,
+		Signer:     orderflowSigner,
+		HTTPClient: archiveHTTPClient,
 	})
 	archiveQueue := ArchiveQueue{
 		log:               prx.Log,

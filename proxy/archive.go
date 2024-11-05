@@ -1,7 +1,5 @@
 package proxy
 
-// TODO: what if archive stalls? make sure that spikes are processed properly
-
 import (
 	"context"
 	"errors"
@@ -22,6 +20,8 @@ var (
 	ArchiveBatchSizeFlushTimeout = time.Second * 6
 
 	errArchivePublicRequest = errors.New("public RPC request should not reach archive")
+
+	ArchiveRequestTimeout = time.Second * 30
 )
 
 type ArchiveQueue struct {
@@ -30,27 +30,57 @@ type ArchiveQueue struct {
 	flushQueue        chan struct{}
 	archiveClient     rpcclient.RPCClient
 	blockNumberSource *BlockNumberSource
+	workerCount       int
 }
 
 func (aq *ArchiveQueue) Run() {
+	var workers []*archiveQueueWorker
+	workerCount := 1
+	if aq.workerCount > 0 {
+		workerCount = aq.workerCount
+	}
+	workersQueue := make(chan *ParsedRequest)
+	for w := 0; w < workerCount; w++ {
+		worker := &archiveQueueWorker{
+			log:           aq.log.With(slog.Int("worker", w)),
+			archiveClient: aq.archiveClient,
+			queue:         workersQueue,
+			flushQueue:    make(chan struct{}),
+		}
+		go worker.runWorker()
+		workers = append(workers, worker)
+	}
+	aq.log.Info("Started archival workers", slog.Int("workers", workerCount))
+	defer func() {
+		for _, worker := range workers {
+			worker.close()
+		}
+		aq.log.Info("Stopped archival workers", slog.Int("workers", workerCount))
+	}()
+
 	var (
-		flushTimer   = time.After(ArchiveBatchSizeFlushTimeout)
-		pendingBatch []*ParsedRequest
-		forceFlush   = false
+		flushTimer = time.After(ArchiveBatchSizeFlushTimeout)
+		needFlush  = false
 	)
 	for {
-		needFlush := forceFlush || len(pendingBatch) >= ArchiveBatchSize
-		if len(pendingBatch) == 0 {
-			needFlush = false
-		}
-
 		if needFlush {
-			aq.flush(pendingBatch)
-			pendingBatch = nil
+			for _, worker := range workers {
+				select {
+				case worker.flushQueue <- struct{}{}:
+				default:
+				}
+			}
+			needFlush = false
+			flushTimer = time.After(ArchiveBatchSizeFlushTimeout)
 		}
-
-		forceFlush = false
 		select {
+		case _, more := <-aq.flushQueue:
+			if !more {
+				return
+			}
+			needFlush = true
+		case <-flushTimer:
+			needFlush = true
 		case req, more := <-aq.queue:
 			if !more {
 				return
@@ -65,15 +95,11 @@ func (aq *ArchiveQueue) Run() {
 			if processedReq == nil {
 				continue
 			}
-			pendingBatch = append(pendingBatch, req)
-		case _, more := <-aq.flushQueue:
-			if !more {
-				return
+			select {
+			case workersQueue <- processedReq:
+			default:
+				aq.log.Error("Archive workers are stalling")
 			}
-			forceFlush = true
-		case <-flushTimer:
-			forceFlush = true
-			flushTimer = time.After(ArchiveBatchSizeFlushTimeout)
 		}
 	}
 }
@@ -113,6 +139,92 @@ func (aq *ArchiveQueue) updateParsedRequest(input *ParsedRequest) (*ParsedReques
 	return input, nil
 }
 
+type archiveQueueWorker struct {
+	log           *slog.Logger
+	archiveClient rpcclient.RPCClient
+	queue         chan *ParsedRequest
+	flushQueue    chan struct{}
+}
+
+func (aqw *archiveQueueWorker) close() {
+	close(aqw.queue)
+	close(aqw.flushQueue)
+}
+
+func (aqw *archiveQueueWorker) runWorker() {
+	var pendingBatch []*ParsedRequest
+	for {
+		select {
+		case req, more := <-aqw.queue:
+			if !more {
+				return
+			}
+			pendingBatch = append(pendingBatch, req)
+		case _, more := <-aqw.flushQueue:
+			if !more {
+				return
+			}
+			aqw.flush(pendingBatch)
+			pendingBatch = nil
+		}
+	}
+}
+
+func (aqw *archiveQueueWorker) flush(batch []*ParsedRequest) {
+	args := FlashbotsNewOrderEventsArgs{}
+	for _, request := range batch {
+		event := ArchiveEvent{}
+		metadata := ArchiveEventMetadata{
+			ReceivedAt: request.receivedAt.UnixMilli(),
+		}
+		if request.ethSendBundle != nil {
+			event.EthSendBundle = &ArchiveEventEthSendBundle{
+				Params:   request.ethSendBundle,
+				Metadata: &metadata,
+			}
+		} else if request.mevSendBundle != nil {
+			event.MevSendBundle = &ArchiveEventMevSendBundle{
+				Params:   request.mevSendBundle,
+				Metadata: &metadata,
+			}
+		} else if request.ethCancelBundle != nil {
+			event.EthCancelBundle = &ArchiveEventEthCancelBundle{
+				Params:   request.ethCancelBundle,
+				Metadata: &metadata,
+			}
+		} else {
+			aqw.log.Error("Incorrect request for orderflow archival", slog.String("method", request.method))
+			archiveEventsProcessedErrCounter.Inc()
+			continue
+		}
+		args.OrderEvents = append(args.OrderEvents, event)
+	}
+	if len(args.OrderEvents) == 0 {
+		return
+	}
+	aqw.log.Info("Sending batch to the archive", slog.Int("size", len(args.OrderEvents)))
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), ArchiveRequestTimeout)
+	defer cancel()
+	res, err := aqw.archiveClient.Call(ctx, NewOrderEventsMethod, args)
+	archiveEventsRPCDuration.Update(float64(time.Since(start).Milliseconds()))
+
+	callFailed := false
+	if err != nil {
+		aqw.log.Error("Error while making RPC request to archive", slog.Any("error", err))
+		archiveEventsRPCErrors.Inc()
+		callFailed = true
+	}
+	if res != nil && res.Error != nil {
+		aqw.log.Error("Archive returned error", slog.Any("error", res.Error))
+		archiveEventsRPCErrors.Inc()
+		callFailed = true
+	}
+	if !callFailed {
+		archiveEventsRPCSentCounter.AddInt64(int64(len(args.OrderEvents)))
+	}
+}
+
 type FlashbotsNewOrderEventsArgs struct {
 	OrderEvents []ArchiveEvent `json:"orderEvents"`
 }
@@ -141,57 +253,4 @@ type ArchiveEventMevSendBundle struct {
 type ArchiveEventEthCancelBundle struct {
 	Params   *rpctypes.EthCancelBundleArgs `json:"params"`
 	Metadata *ArchiveEventMetadata         `json:"metadata"`
-}
-
-func (aq *ArchiveQueue) flush(batch []*ParsedRequest) {
-	aq.log.Info("Sending batch to the archive", slog.Int("size", len(batch)))
-	args := FlashbotsNewOrderEventsArgs{}
-	for _, request := range batch {
-		event := ArchiveEvent{}
-		metadata := ArchiveEventMetadata{
-			ReceivedAt: request.receivedAt.UnixMilli(),
-		}
-		if request.ethSendBundle != nil {
-			event.EthSendBundle = &ArchiveEventEthSendBundle{
-				Params:   request.ethSendBundle,
-				Metadata: &metadata,
-			}
-		} else if request.mevSendBundle != nil {
-			event.MevSendBundle = &ArchiveEventMevSendBundle{
-				Params:   request.mevSendBundle,
-				Metadata: &metadata,
-			}
-		} else if request.ethCancelBundle != nil {
-			event.EthCancelBundle = &ArchiveEventEthCancelBundle{
-				Params:   request.ethCancelBundle,
-				Metadata: &metadata,
-			}
-		} else {
-			aq.log.Error("Incorrect request for orderflow archival", slog.String("method", request.method))
-			archiveEventsProcessedErrCounter.Inc()
-			continue
-		}
-		args.OrderEvents = append(args.OrderEvents, event)
-	}
-	if len(args.OrderEvents) == 0 {
-		return
-	}
-	start := time.Now()
-	res, err := aq.archiveClient.Call(context.Background(), NewOrderEventsMethod, args)
-	archiveEventsRPCDuration.Update(float64(time.Since(start).Milliseconds()))
-
-	callFailed := false
-	if err != nil {
-		aq.log.Error("Error while making RPC request to archive", slog.Any("error", err))
-		archiveEventsRPCErrors.Inc()
-		callFailed = true
-	}
-	if res != nil && res.Error != nil {
-		aq.log.Error("Archive returned error", slog.Any("error", res.Error))
-		archiveEventsRPCErrors.Inc()
-		callFailed = true
-	}
-	if !callFailed {
-		archiveEventsRPCSentCounter.AddInt64(int64(len(args.OrderEvents)))
-	}
 }

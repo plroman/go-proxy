@@ -77,7 +77,7 @@ var flags []cli.Flag = []cli.Flag{
 	&cli.IntFlag{
 		Name:    "connections-per-peer",
 		Value:   10,
-		Usage:   "Number of parallel connections for each peer",
+		Usage:   "Number of parallel connections for each peer and archival RPC",
 		EnvVars: []string{"CONN_PER_PEER"},
 	},
 
@@ -205,6 +205,7 @@ func main() {
 				CertHosts:                   certHosts,
 				BuilderConfigHubEndpoint:    builderConfigHubEndpoint,
 				ArchiveEndpoint:             archiveEndpoint,
+				ArchiveConnections:          connectionsPerPeer,
 				LocalBuilderEndpoint:        builderEndpoint,
 				EthRPC:                      rpcEndpoint,
 				MaxRequestBodySizeBytes:     maxRequestBodySizeBytes,
