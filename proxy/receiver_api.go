@@ -319,6 +319,7 @@ func (prx *ReceiverProxy) HandleParsedRequest(ctx context.Context, parsedRequest
 	if !parsedRequest.publicEndpoint {
 		err := prx.localAPIRateLimiter.Wait(ctx)
 		if err != nil {
+			incAPILocalRateLimits()
 			return errors.Join(errRateLimiting, err)
 		}
 	}
