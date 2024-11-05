@@ -47,18 +47,20 @@ GLOBAL OPTIONS:
    --cert-listen-addr value                    address to listen on for orderflow proxy serving its SSL certificate on /cert (default: "127.0.0.1:14727") [$CERT_LISTEN_ADDR]
    --builder-endpoint value                    address to send local ordeflow to (default: "http://127.0.0.1:8645") [$BUILDER_ENDPOINT]
    --rpc-endpoint value                        address of the node RPC that supports eth_blockNumber (default: "http://127.0.0.1:8545") [$RPC_ENDPOINT]
-   --builder-confighub-endpoint value          address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892") [$BUILDER_CONFIGHUB_ENDPOINT]
+   --builder-confighub-endpoint value          address of the builder config hub enpoint (directly or using the cvm-proxy) (default: "http://127.0.0.1:14892") [$BUILDER_CONFIGHUB_ENDPOINT]
    --orderflow-archive-endpoint value          address of the ordreflow archive endpoint (block-processor) (default: "http://127.0.0.1:14893") [$ORDERFLOW_ARCHIVE_ENDPOINT]
    --flashbots-orderflow-signer-address value  ordreflow from Flashbots will be signed with this address (default: "0x5015Fa72E34f75A9eC64f44a4Fcf0837919D1bB7") [$FLASHBOTS_ORDERFLOW_SIGNER_ADDRESS]
    --max-request-body-size-bytes value         Maximum size of the request body, if 0 default will be used (default: 0) [$MAX_REQUEST_BODY_SIZE_BYTES]
-   --connections-per-peer value                Number of parallel connections for each peer (default: 10) [$CONN_PER_PEER]
+   --connections-per-peer value                Number of parallel connections for each peer and archival RPC (default: 10) [$CONN_PER_PEER]
+   --max-local-requests-per-second value       Maximum number of unique local requests per second (default: 100) [$MAX_LOCAL_RPS]
    --cert-duration value                       generated certificate duration (default: 8760h0m0s) [$CERT_DURATION]
    --cert-hosts value [ --cert-hosts value ]   generated certificate hosts (default: "127.0.0.1", "localhost") [$CERT_HOSTS]
    --metrics-addr value                        address to listen on for Prometheus metrics (metrics are served on $metrics-addr/metrics) (default: "127.0.0.1:8090") [$METRICS_ADDR]
    --log-json                                  log in JSON format (default: false) [$LOG_JSON]
    --log-debug                                 log debug messages (default: false) [$LOG_DEBUG]
    --log-uid                                   generate a uuid and add to all log messages (default: false) [$LOG_UID]
-   --log-service value                         add 'service' tag to logs (default: "tdx-orderflow-proxy-receiver") [$LOG_SERVICE]   --pprof                                     enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false) [$PPROF]
+   --log-service value                         add 'service' tag to logs (default: "tdx-orderflow-proxy-receiver") [$LOG_SERVICE]
+   --pprof                                     enable pprof debug endpoint (pprof is served on $metrics-addr/debug/pprof/*) (default: false) [$PPROF]
    --help, -h                                  show help
 ```
 
@@ -83,7 +85,7 @@ COMMANDS:
 
 GLOBAL OPTIONS:
    --listen-address value               address to listen on for requests (default: "127.0.0.1:8080") [$LISTEN_ADDRESS]
-   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or throught the cvm-proxy) (default: "http://127.0.0.1:14892") [$BUILDER_CONFIGHUB_ENDPOINT]
+   --builder-confighub-endpoint value   address of the builder config hub enpoint (directly or using the cvm-proxy) (default: "http://127.0.0.1:14892") [$BUILDER_CONFIGHUB_ENDPOINT]
    --orderflow-signer-key value         ordreflow will be signed with this address (default: "0xfb5ad18432422a84514f71d63b45edf51165d33bef9c2bd60957a48d4c4cb68e") [$ORDERFLOW_SIGNER_KEY]
    --max-request-body-size-bytes value  Maximum size of the request body, if 0 default will be used (default: 0) [$MAX_REQUEST_BODY_SIZE_BYTES]
    --connections-per-peer value         Number of parallel connections for each peer (default: 10) [$CONN_PER_PEER]
