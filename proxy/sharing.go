@@ -128,8 +128,6 @@ func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer, worker int) {
 		if !more {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
-		defer cancel()
 		var (
 			method string
 			data   any
@@ -154,7 +152,9 @@ func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer, worker int) {
 			continue
 		}
 		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 		resp, err := peer.client.Call(ctx, method, data)
+		cancel()
 		timeShareQueuePeerRPCDuration(peer.name, int64(time.Since(start).Milliseconds()))
 		if err != nil {
 			logger.Warn("Error while proxying request", slog.Any("error", err))
