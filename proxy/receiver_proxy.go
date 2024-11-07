@@ -20,7 +20,7 @@ var (
 	requestsRLUSize = 4096
 	requestsRLUTTL  = time.Second * 12
 
-	peerUpdateTime = time.Minute * 5
+	peerUpdateTime = time.Second * 30
 
 	replacementNonceSize = 4096
 	replacementNonceTTL  = time.Second * 5 * 12
