@@ -33,5 +33,7 @@ func SetupLogger(opts *LoggingOpts) (log *slog.Logger) {
 		log = log.With("version", opts.Version)
 	}
 
+	slog.SetDefault(log)
+
 	return log
 }
