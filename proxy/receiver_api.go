@@ -78,6 +78,7 @@ func (prx *ReceiverProxy) LocalJSONRPCHandler(maxRequestBodySizeBytes int64) (*r
 func (prx *ReceiverProxy) ValidateSigner(ctx context.Context, req *ParsedRequest, publicEndpoint bool) error {
 	req.signer = rpcserver.GetSigner(ctx)
 	if !publicEndpoint {
+		req.peerName = "local-request"
 		return nil
 	}
 
