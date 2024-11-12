@@ -165,7 +165,6 @@ func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer, worker int) {
 			logger.Warn("Error returned from target while proxying", slog.Any("error", resp.Error))
 			incShareQueuePeerRPCErrors(peer.name)
 		}
-		incShareQueueTotalRequests(peer.name)
 		proxiedRequestCount += 1
 		logger.Debug("Message proxied")
 	}
