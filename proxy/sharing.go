@@ -145,7 +145,8 @@ func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer, worker int) {
 			method = EthSendRawTransactionMethod
 			data = req.ethSendRawTransaction
 		} else if req.bidSubsidiseBlock != nil {
-			continue
+			method = BidSubsidiseBlockMethod
+			data = req.bidSubsidiseBlock
 		} else {
 			logger.Error("Unknown request type", slog.String("method", req.method))
 			shareQueueInternalErrors.Inc()

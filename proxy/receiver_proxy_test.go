@@ -37,6 +37,8 @@ var (
 	archiveServerRequests chan *RequestData
 
 	proxies []*OrderflowProxyTestSetup
+
+	flashbotsSigner *signature.Signer
 )
 
 func ServeHTTPRequestToChan(channel chan *RequestData) *httptest.Server {
@@ -116,6 +118,12 @@ func StartTestOrderflowProxy(name string) (*OrderflowProxyTestSetup, error) {
 }
 
 func TestMain(m *testing.M) {
+	signer, err := signature.NewRandomSigner()
+	if err != nil {
+		panic(err)
+	}
+	flashbotsSigner = signer
+
 	archiveServerRequests = make(chan *RequestData)
 	builderHub = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -180,8 +188,9 @@ func createProxy(localBuilder, name string) *ReceiverProxy {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	proxy, err := NewReceiverProxy(ReceiverProxyConfig{
 		ReceiverProxyConstantConfig: ReceiverProxyConstantConfig{
-			Log:  log,
-			Name: name,
+			Log:                    log,
+			Name:                   name,
+			FlashbotsSignerAddress: flashbotsSigner.Address(),
 		},
 		CertValidDuration:        time.Hour * 24,
 		CertHosts:                []string{"localhost", "127.0.0.1"},
@@ -474,4 +483,41 @@ func TestProxyShareBundleReplacementUUIDAndCancellation(t *testing.T) {
 
 	builderRequest = expectRequest(t, proxies[0].localBuilderRequests)
 	require.Equal(t, expectedRequest, builderRequest.body)
+}
+
+func TestProxyBidSubsidiseBlockCall(t *testing.T) {
+	defer func() {
+		proxiesFlushQueue()
+		for {
+			select {
+			case <-time.After(time.Millisecond * 100):
+				expectNoRequest(t, archiveServerRequests)
+				return
+			case <-archiveServerRequests:
+			}
+		}
+	}()
+
+	client, err := RPCClientWithCertAndSigner(proxies[0].publicServerEndpoint, proxies[0].proxy.PublicCertPEM, flashbotsSigner, 1)
+	require.NoError(t, err)
+
+	expectedRequest := `{"method":"bid_subsidiseBlock","params":[1000],"id":0,"jsonrpc":"2.0"}`
+
+	// we add all proxies to the list of peers
+	builderHubPeers = nil
+	for _, proxy := range proxies {
+		err = proxy.proxy.RegisterSecrets(context.Background())
+		require.NoError(t, err)
+	}
+	proxiesUpdatePeers(t)
+
+	args := rpctypes.BidSubsisideBlockArgs(1000)
+	resp, err := client.Call(context.Background(), BidSubsidiseBlockMethod, &args)
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+
+	builderRequest := expectRequest(t, proxies[0].localBuilderRequests)
+	require.Equal(t, expectedRequest, builderRequest.body)
+	expectNoRequest(t, proxies[1].localBuilderRequests)
+	expectNoRequest(t, proxies[2].localBuilderRequests)
 }
