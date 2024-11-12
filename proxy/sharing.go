@@ -162,7 +162,7 @@ func (sq *ShareQueue) proxyRequests(peer *shareQueuePeer, worker int) {
 			incShareQueuePeerRPCErrors(peer.name)
 		}
 		if resp != nil && resp.Error != nil {
-			logger.Warn("Error returned form target while proxying", slog.Any("error", resp.Error))
+			logger.Warn("Error returned from target while proxying", slog.Any("error", resp.Error))
 			incShareQueuePeerRPCErrors(peer.name)
 		}
 		incShareQueueTotalRequests(peer.name)
