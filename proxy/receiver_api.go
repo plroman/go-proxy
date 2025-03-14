@@ -126,6 +126,18 @@ func (prx *ReceiverProxy) EthSendBundle(ctx context.Context, ethSendBundle rpcty
 
 	if !publicEndpoint {
 		ethSendBundle.SigningAddress = &parsedRequest.signer
+
+		if ethSendBundle.ReplacementUUID != nil {
+			timestampInt := apiNow().UnixMicro()
+			var timestamp uint64
+			if timestampInt < 0 {
+				timestamp = 0
+			} else {
+				timestamp = uint64(timestampInt)
+			}
+
+			ethSendBundle.ReplacementNonce = &timestamp
+		}
 	}
 
 	uniqueKey := ethSendBundle.UniqueKey()
