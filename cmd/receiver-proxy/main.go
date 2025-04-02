@@ -234,6 +234,7 @@ func main() {
 				case <-registerContext.Done():
 				}
 			}()
+
 			err = instance.RegisterSecrets(registerContext)
 			registerCancel()
 			if err != nil {
