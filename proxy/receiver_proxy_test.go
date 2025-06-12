@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/flashbots/go-utils/rpctypes"
 	"github.com/flashbots/go-utils/signature"
+	utils_tls "github.com/flashbots/go-utils/tls"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,6 +44,26 @@ var (
 	flashbotsSigner *signature.Signer
 )
 
+func testAddBuilderhubPeer(proxyIndex int) {
+	proxy := proxies[proxyIndex]
+
+	ip := proxy.ip
+	name := proxy.proxy.Name
+
+	req := ConfighubOrderflowProxyCredentials{
+		EcdsaPubkeyAddress: proxy.proxy.OrderflowSigner.Address(),
+	}
+
+	builderHubPeers = append(builderHubPeers, ConfighubBuilder{
+		Name:           name,
+		DNSName:        ip,
+		OrderflowProxy: req,
+		Instance: ConfighubInstanceData{
+			TLSCert: string(proxy.PublicCertPEM),
+		},
+	})
+}
+
 func ServeHTTPRequestToChan(channel chan *RequestData) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -57,7 +79,6 @@ type OrderflowProxyTestSetup struct {
 	proxy        *ReceiverProxy
 	publicServer *http.Server
 	localServer  *http.Server
-	certServer   *httptest.Server
 
 	ip                   string
 	publicServerEndpoint string
@@ -65,12 +86,13 @@ type OrderflowProxyTestSetup struct {
 
 	localBuilderServer   *httptest.Server
 	localBuilderRequests chan *RequestData
+
+	PublicCertPEM []byte
 }
 
 func (setup *OrderflowProxyTestSetup) Close() {
 	_ = setup.publicServer.Close()
 	_ = setup.localServer.Close()
-	setup.certServer.Close()
 	setup.localBuilderServer.Close()
 	setup.proxy.Stop()
 }
@@ -79,10 +101,25 @@ func StartTestOrderflowProxy(name, certPath, certKeyPath string) (*OrderflowProx
 	localBuilderRequests := make(chan *RequestData, 1)
 	localBuilderServer := ServeHTTPRequestToChan(localBuilderRequests)
 
+	cert, key, err := utils_tls.GetOrGenerateTLS(certPath, certKeyPath, time.Hour*24, []string{"localhost", "127.0.0.1"})
+	if err != nil {
+		return nil, err
+	}
+
+	certificate, err := tls.X509KeyPair(cert, key)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		MinVersion:   tls.VersionTLS13,
+	}
+
 	proxy := createProxy(localBuilderServer.URL, name, certPath, certKeyPath)
 	publicProxyServer := &http.Server{ //nolint:gosec
 		Handler:   proxy.SystemHandler,
-		TLSConfig: proxy.TLSConfig(),
+		TLSConfig: tlsConfig.Clone(),
 	}
 	publicListener, err := net.Listen("tcp", ":0") //nolint:gosec
 	if err != nil {
@@ -94,7 +131,7 @@ func StartTestOrderflowProxy(name, certPath, certKeyPath string) (*OrderflowProx
 
 	localProxyServer := &http.Server{ //nolint:gosec
 		Handler:   proxy.UserHandler,
-		TLSConfig: proxy.TLSConfig(),
+		TLSConfig: tlsConfig.Clone(),
 	}
 	localListener, err := net.Listen("tcp", ":0") //nolint:gosec
 	if err != nil {
@@ -103,18 +140,16 @@ func StartTestOrderflowProxy(name, certPath, certKeyPath string) (*OrderflowProx
 	go localProxyServer.ServeTLS(localListener, "", "")                                                  //nolint:errcheck
 	localServerEndpoint := fmt.Sprintf("https://localhost:%d", localListener.Addr().(*net.TCPAddr).Port) //nolint:forcetypeassert
 
-	certProxyServer := httptest.NewServer(proxy.CertHandler)
-
 	return &OrderflowProxyTestSetup{
 		proxy:                proxy,
 		publicServer:         publicProxyServer,
 		localServer:          localProxyServer,
-		certServer:           certProxyServer,
 		publicServerEndpoint: publicServerEndpoint,
 		localServerEndpoint:  localServerEndpoint,
 		localBuilderServer:   localBuilderServer,
 		localBuilderRequests: localBuilderRequests,
 		ip:                   ip,
+		PublicCertPEM:        cert,
 	}, nil
 }
 
@@ -133,33 +168,7 @@ func TestMain(m *testing.M) {
 
 	archiveServerRequests = make(chan *RequestData)
 	builderHub = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		defer r.Body.Close()
-
-		if r.URL.Path == "/api/l1-builder/v1/register_credentials/orderflow_proxy" {
-			var req ConfighubOrderflowProxyCredentials
-			err := json.Unmarshal(body, &req)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(err.Error()))
-			}
-			var (
-				ip   string
-				name string
-			)
-			for _, proxy := range proxies {
-				if proxy.proxy.OrderflowSigner.Address() == req.EcdsaPubkeyAddress {
-					ip = proxy.ip
-					name = proxy.proxy.Name
-					break
-				}
-			}
-			builderHubPeers = append(builderHubPeers, ConfighubBuilder{
-				Name:           name,
-				IP:             ip,
-				OrderflowProxy: req,
-			})
-		} else if r.URL.Path == "/api/l1-builder/v1/builders" {
+		if r.URL.Path == "/api/l1-builder/v1/builders" {
 			res, err := json.Marshal(builderHubPeers)
 			if err != nil {
 				panic(err)
@@ -209,10 +218,6 @@ func createProxy(localBuilder, name, certPath, certKeyPath string) *ReceiverProx
 			Name:                   name,
 			FlashbotsSignerAddress: flashbotsSigner.Address(),
 		},
-		CertValidDuration: time.Hour * 24,
-		CertHosts:         []string{"localhost", "127.0.0.1"},
-		CertPath:          certPath,
-		CertKeyPath:       certKeyPath,
 
 		BuilderConfigHubEndpoint: builderHub.URL,
 		ArchiveEndpoint:          archiveServer.URL,
@@ -224,22 +229,6 @@ func createProxy(localBuilder, name, certPath, certKeyPath string) *ReceiverProx
 		panic(err)
 	}
 	return proxy
-}
-
-func TestPublishSecrets(t *testing.T) {
-	err := proxies[0].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
-}
-
-func TestServeCert(t *testing.T) {
-	resp, err := http.Get(proxies[0].certServer.URL)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-
-	require.Equal(t, string(proxies[0].proxy.PublicCertPEM), string(body))
 }
 
 func expectRequest(t *testing.T, ch chan *RequestData) *RequestData {
@@ -298,15 +287,14 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
 	expectedRequest := `{"method":"eth_sendBundle","params":[{"txs":null,"blockNumber":"0x3e8","version":"v2","signingAddress":"0x9349365494be4f6205e5d44bdc7ec7dcd134becf"}],"id":0,"jsonrpc":"2.0"}`
 
 	// we start with no peers
 	builderHubPeers = nil
-	err = proxies[0].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
+	testAddBuilderhubPeer(0)
 	proxiesUpdatePeers(t)
 
 	blockNumber := hexutil.Uint64(1000)
@@ -324,8 +312,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	slog.Info("Adding first peer")
 
 	// add one more peer
-	err = proxies[1].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
+	testAddBuilderhubPeer(1)
 	proxiesUpdatePeers(t)
 
 	blockNumber = hexutil.Uint64(1001)
@@ -344,8 +331,7 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 	// add another peer
 	slog.Info("Adding second peer")
 
-	err = proxies[2].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
+	testAddBuilderhubPeer(2)
 	proxiesUpdatePeers(t)
 
 	blockNumber = hexutil.Uint64(1002)
@@ -384,13 +370,12 @@ func TestProxyBundleRequestWithPeerUpdate(t *testing.T) {
 func TestProxySendToArchive(t *testing.T) {
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
 	// we start with no peers
 	builderHubPeers = nil
-	err = proxies[0].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
+	testAddBuilderhubPeer(0)
 	proxiesUpdatePeers(t)
 
 	apiNow = func() time.Time {
@@ -468,13 +453,12 @@ func TestProxyShareBundleReplacementUUIDAndCancellation(t *testing.T) {
 
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
 	// we start with no peers
 	builderHubPeers = nil
-	err = proxies[0].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
+	testAddBuilderhubPeer(0)
 	proxiesUpdatePeers(t)
 
 	// first call
@@ -546,16 +530,15 @@ func TestProxyBidSubsidiseBlockCall(t *testing.T) {
 		}
 	}()
 
-	client, err := RPCClientWithCertAndSigner(proxies[0].publicServerEndpoint, proxies[0].proxy.PublicCertPEM, flashbotsSigner, 1)
+	client, err := RPCClientWithCertAndSigner(proxies[0].publicServerEndpoint, proxies[0].PublicCertPEM, flashbotsSigner, 1)
 	require.NoError(t, err)
 
 	expectedRequest := `{"method":"bid_subsidiseBlock","params":[1000],"id":0,"jsonrpc":"2.0"}`
 
 	// we add all proxies to the list of peers
 	builderHubPeers = nil
-	for _, proxy := range proxies {
-		err = proxy.proxy.RegisterSecrets(context.Background())
-		require.NoError(t, err)
+	for i := range proxies {
+		testAddBuilderhubPeer(i)
 	}
 	proxiesUpdatePeers(t)
 
@@ -570,35 +553,18 @@ func TestProxyBidSubsidiseBlockCall(t *testing.T) {
 	expectNoRequest(t, proxies[2].localBuilderRequests)
 }
 
-func TestBuilderNetRootCall(t *testing.T) {
-	tempDir := t.TempDir()
-	certPath := path.Join(tempDir, "cert")
-	keyPath := path.Join(tempDir, "key")
-	proxy, err := StartTestOrderflowProxy("1", certPath, keyPath)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-
-	rr := httptest.NewRecorder()
-	proxy.localServer.Handler.ServeHTTP(rr, req)
-	respBody, err := io.ReadAll(rr.Body)
-	require.NoError(t, err)
-	require.Contains(t, string(respBody), "-----BEGIN CERTIFICATE-----")
-}
-
 func TestValidateLocalBundles(t *testing.T) {
 	signer, err := signature.NewSignerFromHexPrivateKey("0xd63b3c447fdea415a05e4c0b859474d14105a88178efdf350bc9f7b05be3cc58")
 	require.NoError(t, err)
-	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].proxy.PublicCertPEM, signer, 1)
+	client, err := RPCClientWithCertAndSigner(proxies[0].localServerEndpoint, proxies[0].PublicCertPEM, signer, 1)
 	require.NoError(t, err)
 
-	pubClient, err := RPCClientWithCertAndSigner(proxies[0].publicServerEndpoint, proxies[0].proxy.PublicCertPEM, flashbotsSigner, 1)
+	pubClient, err := RPCClientWithCertAndSigner(proxies[0].publicServerEndpoint, proxies[0].PublicCertPEM, flashbotsSigner, 1)
 	require.NoError(t, err)
 
 	// we start with no peers
 	builderHubPeers = nil
-	err = proxies[0].proxy.RegisterSecrets(context.Background())
-	require.NoError(t, err)
+	testAddBuilderhubPeer(0)
 	proxiesUpdatePeers(t)
 
 	apiNow = func() time.Time {
