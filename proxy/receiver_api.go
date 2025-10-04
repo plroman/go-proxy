@@ -155,6 +155,7 @@ func (prx *ReceiverProxy) EthSendBundle(ctx context.Context, ethSendBundle rpcty
 
 	err = ValidateEthSendBundle(&ethSendBundle, systemEndpoint)
 	if err != nil {
+		prx.Log.Info("+++++ error", err)
 		return err
 	}
 

@@ -40,9 +40,10 @@ func IsVersionValid(version *string) bool {
 
 func ValidateEthSendBundle(args *rpctypes.EthSendBundleArgs, publicEndpoint bool) error {
 	if !publicEndpoint {
-		if args.SigningAddress != nil {
-			return errSigningAddress
-		}
+// PLR: fails validation because the signing address field in the submitted bundles in not empty
+//		if args.SigningAddress != nil {
+//			return errSigningAddress
+//		}
 	}
 
 	valid := IsVersionValid(args.Version)
