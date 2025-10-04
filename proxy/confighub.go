@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -31,9 +32,10 @@ type ConfighubBuilder struct {
 }
 
 func (b *ConfighubBuilder) SystemAPIAddress() string {
-	if b.DNSName != "" {
-		return OrderflowProxyURLFromIPOrDNSName(b.DNSName)
-	}
+// PLR: must choose the IP field because the DNS field given by the mock hub doesn't contain the needed port so if DNS is chosen it adds the default port 5544
+//	if b.DNSName != "" {
+//		return OrderflowProxyURLFromIPOrDNSName(b.DNSName)
+//	}
 	return OrderflowProxyURLFromIPOrDNSName(b.IP)
 }
 
