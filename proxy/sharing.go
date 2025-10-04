@@ -127,7 +127,7 @@ func (sq *ShareQueue) Run() {
 				if info.OrderflowProxy.EcdsaPubkeyAddress == sq.signer.Address() {
 					continue
 				}
-				client, err := NewFastHTTPClient([]byte(info.TLSCert()), workersPerPeer)
+				client, err := NewFastHTTPClient([]byte(info.TLSCert()), workersPerPeer, true)
 				if err != nil {
 					sq.log.Error("Failed to create a peer client3", slog.Any("error", err))
 					shareQueueInternalErrors.Inc()
@@ -154,7 +154,7 @@ type LocalBuilderSender struct {
 func NewLocalBuilderSender(logger *slog.Logger, endpoint string, maxOpenConnections int) (LocalBuilderSender, error) {
 	logger = logger.With(slog.String("peer", "local-builder"))
 
-	client, err := NewFastHTTPClient(nil, maxOpenConnections)
+	client, err := NewFastHTTPClient(nil, maxOpenConnections, true)
 	if err != nil {
 		return LocalBuilderSender{}, err
 	}
