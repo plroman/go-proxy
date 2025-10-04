@@ -136,6 +136,8 @@ func (sq *ShareQueue) Run() {
 
 				sq.log.Info("Created client for peer", slog.String("peer", info.Name), slog.String("name", sq.name))
 				newPeer := newShareQueuePeer(info.Name, client, info, info.SystemAPIAddress())
+				sq.log.Info("=====", slog.String("endpoint", newPeer.endpoint))
+
 				peers = append(peers, newPeer)
 				for worker := range workersPerPeer {
 					go sq.proxyRequests(&newPeer, worker)

@@ -106,11 +106,17 @@ func (b *BuilderConfigHub) Builders(internal bool) (result []ConfighubBuilder, e
 	if err != nil {
 		return
 	}
-
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return nil, err
 	}
+
+	// PLR: the IP field given by the mockhub includes http:// which is added later on in the go proxy, resulting in addresses starting with "http://http://"
+	for i := range result {
+		result[i].IP = strings.TrimPrefix(result[i].IP, "http://")
+		b.log.Info("------ new builder", slog.String("cleaned IP", result[i].IP))
+	}
+
 	b.log.Info("Received list of peers from confighub", slog.Bool("internalEndpoint", internal), slog.Any("peers", result))
 	return
 }
